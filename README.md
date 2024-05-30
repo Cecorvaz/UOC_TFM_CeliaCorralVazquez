@@ -30,7 +30,10 @@ Subcarpeta "Datos":
 Subcarpeta "Resultados":
   
 * Archivo XXXX.xlsx: archivo excel con los marcadores significativos correspondientes a cada subcluster.
-* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster.
+* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada supercluster.
+* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células B.
+* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células T.
+* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células mieloides.
 * Archivo XXXX.xlsx: archivo excel con los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
 * Archivo XXXX.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
 
