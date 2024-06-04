@@ -1,0 +1,806 @@
+---
+title: 'Informe 2: Clustering y etiquetado de las muestras'
+author: "Celia Corral-Vázquez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(knitr)
+library(scCustomize)
+library(stringr)
+library(clustree)
+library(celldex)
+library(SingleR)
+library(pheatmap)
+library(HGNChelper)
+library(tidyverse)
+library(reshape2)
+library(moonBook)
+library(webr)
+library(openxlsx)
+library(UCell)
+```
+
+```{r}
+# Leemos datos integrados
+data <- readRDS("./Datos/WT_IgAKO_integrado.rds")
+# Establecemos orden de cepas para que aparezcan siempre así en las figuras
+data$Strain <- factor(data$Strain, levels = c("WT", "IgAKO"))
+```
+
+
+# 1. Descripción de las muestras:
+
+6 muestras de células mononucleares (CD45+) de lámina propia de intestino delgado de ratón.
+
+Se analizaron dos cepas de ratón:
+
+* Wildtype (WT) (n = 3)
+
+* IgA *knockout* (IgA-KO) (n = 3)
+
+# 2. Metodologia 
+
+## 2.1. Previa
+
+Análisis *single-cell RNA-seq*:
+
+* Procesamiento de datos: Cell ranger v.6.1
+
+* Genoma de referencia: refdata-gex-mm10-2020-A
+
+Análisis de los datos: paquete de R *Seurat*.
+
+* Controles de calidad y filtrado: nº de células, distribución de features y counts, % genes mitocondriales, expresión del gen *Malat1*.
+
+* Reducción de dimensiones mediante PCA.
+
+* Normalización por SCTransform.
+
+* Pruebas de integración de las muestras mediante tres métodos (Harmony, CCA, RPCA).
+
+## 2.2. Actual
+
+Se seleccionó la integración mediante Harmony para realizar el clustering.
+
+Se repitió la reducción de dimensiones PCA eliminando la cadena ligera de las immunoglobulinas (eran muy abundantes y podíanenmascarar los datos para hacer el clustering). Las cadenas pesadas no se eliminaron porque podrían resultar informativas en nuestro caso, para localizar clusters de diferentes isotipos en el caso de las células B.
+
+Se realizaron pruebas de clustering mediante UMAP a diferentes resoluciones y se creó un árbol de clusters para facilitar la elección.
+
+Una vez seleccionada la resolución final, se realizó una predicción de las principales poblaciones generales con el paquete *SingleR* y la base de datos de ratones *ImmGenData*, además de estudiar el listado de marcadores propios de cada cluster.
+
+Luego, cada cluster o supercluster (conjunto de clusters que aparecen agrupados) se sometió por separado a un nuevo clustering, siguiendo la misma metodología, para localizar las subpoblaciones celulares.
+
+
+# 3. Clusters celulares 
+
+## 3.1. Selección de resolución {.tabset}
+
+
+```{r, fig.height=4}
+# PCA
+hvg <- VariableFeatures(data)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+data <-  RunPCA(data, features = hvg, verbose = FALSE)
+ElbowPlot(data)
+```
+
+```{r}
+# Establecemos reducción que utilizaremos, nº dimensiones del PCA y resoluciones de UMAP que queremos probar
+reduction = "HarmonyIntegration"
+npca = 18
+resolutions = c(0.1,0.3,0.5,0.7,0.9,1.1,1.3,1.5)
+```
+
+
+```{r include=FALSE}
+# Lista para guardar todos los umaps que generemos
+umaps <- list()
+# Calculamos neighbors
+data <- FindNeighbors(data, dims = 1:npca, verbose = FALSE)
+
+# Bucle para correr UMAPS a las distinta resoluciones
+options(future.globals.maxSize = 10000 * 1024^2)
+for(i in 1:length(resolutions)){
+    title = paste0("Resolution_", resolutions[i], "_", reduction)
+    data <- FindClusters(data, resolution = resolutions[i])
+    data <- RunUMAP(data, dims = 1:npca, reduction = reduction, verbose = F, reduction.name = paste0("umap_", resolutions[i]))
+    p <- DimPlot(data, reduction = paste0("umap_", resolutions[i]), group.by = "seurat_clusters") +
+      theme(legend.position = 'right') + labs(title = title)
+    umaps[[i]] <- p
+}
+# Clustree de los clusters a las distintas resoluciones
+clustree <- clustree(data, prefix = 'SCT_snn_res.') + labs(subtitle = "clustree_resolutions" ) +
+    theme(legend.position = "bottom")
+```
+
+```{r, fig.height=8, fig.width=15}
+clustree
+```
+
+
+### Resolución  `r resolutions[1]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[1]]
+```
+
+### Resolución  `r resolutions[2]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[2]]
+```
+
+### Resolución  `r resolutions[3]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[3]]
+```
+
+### Resolución  `r resolutions[4]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[4]]
+```
+
+### Resolución  `r resolutions[5]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[5]]
+```
+
+### Resolución  `r resolutions[6]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[6]]
+```
+
+### Resolución  `r resolutions[7]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[7]]
+```
+
+### Resolución  `r resolutions[8]`
+
+```{r, fig.width=8, fig.height=5}
+umaps[[8]]
+```
+
+### Resolución definitiva
+
+```{r}
+# Indicamos resolución final elegida
+final_res = 0.3
+Idents(data) <- data$SCT_snn_res.0.3
+```
+
+La resolución final escogida fue de `r final_res`.
+
+
+```{r, fig.width=8, fig.height=5}
+DimPlot(data, reduction = paste0("umap_", final_res), label = T , repel = T, label.size = 3, pt.size = 0.5) +
+      theme(legend.position = 'right') + labs(title = paste0("Resolution_", final_res))
+```
+
+
+## 3.2. Etiquetado de los clusters principales
+
+### a) Clasificación SingleR (ImmGenData)
+
+
+```{r, fig.width=10, fig.height=4}
+# Bajar base de datos de referencia ImmGenData (celldex)
+ref1 <- celldex::ImmGenData()
+# Filtramos los tipos celulares principales que esperamos encontrar en células CD45+
+ref2 <- ref1[,grepl('DC|B cell|Neutrophils|T cells|Monocytes|Erythroblast|
+                 Macrophages|NKT|Neutrophils|Basophils|Eosinophils|Mast cells|ILC|NK cells', ref1$label.main)]
+ref2 <- ref2[,!grepl("pro", ref2$label.main)]
+
+# Hacemos una predicción de tipo celular por cluster
+test_assay <- GetAssayData(data, slot = "data", assay = "SCT")
+pred2.1 <- SingleR(test=test_assay, ref=ref2, labels=ref2$label.main, de.method = 'wilcox', clusters=Idents(data) )
+plotScoreHeatmap(pred2.1, show_colnames = T)
+
+```
+
+
+
+
+### b) UMAP de los clusters etiquetados
+
+```{r, fig.width=8, fig.height=5}
+# Añadimos las etiquetas predichas a los datos ("Clusters_main_def)
+new.ids <- pred2.1$labels
+names(new.ids) <- levels(data)
+data <- RenameIdents(data, new.ids)
+data$Clusters_main_def <- Idents(data)
+data$Clusters_subclusters_def <- Idents(data)
+
+# umap
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = paste0("umap_", final_res)) +
+      theme(legend.position = 'right') 
+
+```
+
+
+
+
+
+
+## 3.3. Subclusters
+
+### a) T cells, ILC, NK
+
+#### a.1) UMAP inicial
+
+```{r, fig.width=8, fig.height=5}
+# Subcluster: células T (normalización, PCA, clusters, umap)
+tcells <- subset(x=data, Clusters_subclusters_def %in% c("T cells", "ILC", "NKT"))
+tcells <- SCTransform(tcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(tcells)
+# excluimos cadenas ligeras de Ig
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+tcells <- RunPCA(tcells, features = hvg, verbose = FALSE)
+tcells <- FindNeighbors(tcells, dims = 1:18, verbose = FALSE)
+tcells <- FindClusters(tcells, verbose = FALSE, cluster.name = "umap.tcells", resolution = 0.7)
+tcells <- RunUMAP(tcells, dims = 1:18, reduction.name = "umap.tcells", verbose = FALSE)
+
+# Umap
+DimPlot(tcells, reduction = "umap.tcells", label = TRUE)
+# Guardamos los clusters iniciales por si acaso
+tcells$cluster_initial <- Idents(tcells)
+```
+
+```{r, fig.width=10, fig.height=4}
+DimPlot(tcells, reduction = "umap.tcells", label = TRUE, split.by="Strain")
+```
+
+#### a.2) Marcadores
+
+```{r, fig.width=10, fig.height=6}
+markers <- FindAllMarkers(object = tcells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+markers_filt <- dplyr::filter(markers, p_val_adj < 0.05 & markers$avg_log2FC > 1)
+topmarkers <- markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 5)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(tcells, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+#### a.3) Clasificación SingleR (ImmGenData)
+
+```{r, fig.width=10, fig.height=7}
+# Predicción SingleR de subtipos celulares
+Idents(tcells) <- tcells@meta.data$cluster_initial
+test_assay_t <- GetAssayData(tcells, slot = "scale.data", assay = "SCT")
+pred_t <- SingleR(test=test_assay_t, ref=ref2, labels=ref2$label.fine, de.method = 'wilcox', clusters=Idents(tcells) )
+plotScoreHeatmap(pred_t, show_colnames = T)
+
+
+```
+
+
+#### a.4) UMAP definitivo
+
+```{r, fig.width=8, fig.height=5}
+# Etiquetamos los clusters
+Idents(tcells) <- tcells@meta.data$cluster_initial
+labels <- c("T cells (CD4+ MEM)",
+            "T cells (CD8+ TC1)", 
+            "Ambiguous", 
+            "T cells (CD8+ TC22)", 
+            "T cells (CD4+ Tregs)", 
+            "T cells (Naive)", 
+            "T cells (Naive)", 
+            "T cells (DN2)", 
+            "T cells (Th2)", 
+            "NK", 
+            "ILC (ILC3)", 
+            "T cells (CD4+ Fol.h)", 
+            "T cells (CD8+ TC22)", 
+            "ILC (ILC2)", 
+            "T cells (CD4+ MEM)", 
+            "T cells (CD4+ MEM)", 
+            "Ambiguous")
+new.ids.t <- labels
+names(new.ids.t) <- levels(tcells)
+tcells <- RenameIdents(tcells, new.ids.t)
+tcells$cluster_t_final <- Idents(tcells)
+
+# umap
+DimPlot(tcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap.tcells") +
+      theme(legend.position = 'right') 
+```
+
+
+```{r}
+# Guardamos los labels en "Clusters_subclusters_def" de main data
+tcells$cluster_t_final <- Idents(tcells)
+Idents(data) <- data@meta.data$Clusters_subclusters_def
+Idents(data) <- tcells$cluster_t_final
+data@meta.data$Clusters_subclusters_def <- Idents(data)
+```
+
+
+### b) Myeloid cells
+
+#### b.1) UMAP inicial
+
+```{r, fig.width=8, fig.height=5}
+# Subcluster: células B (normalización, PCA, clusters, umap)
+dcells <- subset(x=data, Clusters_main_def %in% c("DC", "Neutrophils"))
+dcells <- SCTransform(dcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(dcells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+dcells <- RunPCA(dcells, features = hvg, verbose = FALSE)
+dcells <- FindNeighbors(dcells, dims = 1:18, verbose = FALSE)
+dcells <- FindClusters(dcells, verbose = FALSE, cluster.name = "umap.dcells", resolution = 0.3)
+dcells <- RunUMAP(dcells, dims = 1:18, reduction.name = "umap.dcells", verbose = FALSE)
+
+# umap
+DimPlot(dcells, reduction = "umap.dcells", label = TRUE)
+# guardamos clusters iniciales
+dcells$cluster_initial <- Idents(dcells)
+```
+
+```{r, fig.width=10, fig.height=4}
+DimPlot(dcells, reduction = "umap.dcells", label = TRUE, split.by="Strain")
+```
+
+#### b.2) Marcadores
+
+```{r}
+markers <- FindAllMarkers(object = dcells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+markers_filt <- dplyr::filter(markers, p_val_adj < 0.05 & markers$avg_log2FC > 1)
+
+topmarkers <- markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 6)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(dcells, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+#### b.3) Clasificación SingleR (ImmGenData)
+
+```{r, fig.width=10, fig.height=7}
+#Predicción SingleR subtipos celulares
+Idents(dcells) <- dcells@meta.data$cluster_initial
+test_assay_d <- GetAssayData(dcells, slot = "scale.data", assay = "SCT")
+pred_d <- SingleR(test=test_assay_d, ref=ref2, labels=ref2$label.fine, de.method = 'wilcox', clusters=Idents(dcells) )
+plotScoreHeatmap(pred_d, show_colnames = T)
+
+
+```
+
+#### b.4) UMAP definitivo
+
+```{r, fig.width=8, fig.height=5}
+# Etiquetamos los clusters
+Idents(dcells) <- dcells@meta.data$cluster_initial
+labels <- c("DC (cDC)", 
+            "Macrophages", 
+            "Macrophages", 
+            "Monocytes", 
+            "Neutrophils", 
+            "DC (cDC2B)", 
+            "B cells", 
+            "DC (cDC)", 
+            "Epithelial",
+            "DC (cDC)",
+            "DC (cDC2A)",
+            "DC (cDC)",
+            "Mast cells") 
+new.ids.d <- labels
+names(new.ids.d) <- levels(dcells)
+dcells <- RenameIdents(dcells, new.ids.d)
+dcells$cluster_d_final <- Idents(dcells)
+
+# umap
+DimPlot(dcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap.dcells") +
+      theme(legend.position = 'right') 
+```
+
+```{r}
+# Guardamos los labels en "Clusters_subclusters_def" de main data
+Idents(data) <- data@meta.data$Clusters_subclusters_def
+Idents(data) <- dcells$cluster_d_final
+data@meta.data$Clusters_subclusters_def <- Idents(data)
+```
+
+
+
+### c) B cells
+
+#### c.1) UMAP inicial
+
+```{r, fig.width=8, fig.height=5}
+# Subcluster: células B (normalización, PCA, clusters, umap)
+bcells <- subset(x=data, Clusters_main_def == "B cells" | Clusters_subclusters_def == "B cells")
+bcells <- SCTransform(bcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(bcells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+bcells <- RunPCA(bcells, features = hvg, verbose = FALSE)
+bcells <- FindNeighbors(bcells, dims = 1:13, verbose = FALSE)
+bcells <- FindClusters(bcells, verbose = FALSE, cluster.name = "umap.bcells3", resolution = 0.4)
+bcells <- RunUMAP(bcells, dims = 1:18, reduction.name = "umap.bcells3", verbose = FALSE)
+
+# Guardamos clusters iniciales
+bcells$cluster_initial <- Idents(bcells)
+```
+
+
+```{r, fig.width=8, fig.height=5}
+# Eliminamos de data un potencial cluster de contaminación ("B cells (0)")
+Idents(bcells) <- bcells@meta.data$cluster_initial
+labels <- c("B cells (0)", 
+            "B cells (1)", 
+            "B cells (2)", 
+            "B cells (3)", 
+            "B cells (4)", 
+            "B cells (5)", 
+            "B cells (6)",
+            "B cells (7)",
+            "B cells (8)",
+            "B cells (9)",
+            "B cells (10)",
+            "B cells (11)") 
+new.ids.b <- labels
+names(new.ids.b) <- levels(bcells)
+bcells <- RenameIdents(bcells, new.ids.b)
+bcells$cluster_b_final <- Idents(bcells)
+bcells$Clusters_main_def <- "B cells"
+Idents(data) <- data@meta.data$Clusters_subclusters_def
+Idents(data) <- bcells$cluster_b_final
+data@meta.data$Clusters_subclusters_def <- Idents(data)
+Idents(data) <- data@meta.data$Clusters_main_def
+Idents(data) <- bcells$Clusters_main_def
+data@meta.data$Clusters_main_def <- Idents(data)
+data <- subset(x=data, Clusters_subclusters_def != "B cells (0)")
+data <- SCTransform(data, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(data)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+data <- RunPCA(data, features = hvg, verbose = FALSE)
+data <- FindNeighbors(data, dims = 1:npca, verbose = FALSE)
+data <- FindClusters(data, verbose = FALSE, cluster.name = "umap_final2", resolution = final_res)
+data <- RunUMAP(data, dims = 1:npca, reduction = reduction, reduction.name = "umap_final2", verbose = FALSE)
+Idents(data) <- data@meta.data$Clusters_subclusters_def
+```
+
+
+```{r, fig.width=8, fig.height=5}
+# Subcluster: células B (normalización, PCA, clusters, umap)
+bcells <- subset(x=data, Clusters_main_def == "B cells")
+bcells <- SCTransform(bcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(bcells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+bcells <- RunPCA(bcells, features = hvg, verbose = FALSE)
+bcells <- FindNeighbors(bcells, dims = 1:13, verbose = FALSE)
+bcells <- FindClusters(bcells, verbose = FALSE, cluster.name = "umap.bcells3", resolution = 1)
+bcells <- RunUMAP(bcells, dims = 1:18, reduction.name = "umap.bcells3", verbose = FALSE)
+
+# umap
+DimPlot(bcells, reduction = "umap.bcells3", label = T)
+
+# guardamos nuevos clusters iniciales
+bcells$cluster_initial <- Idents(bcells)
+```
+
+```{r, fig.width=10, fig.height=4}
+DimPlot(bcells, reduction = "umap.bcells3", label = TRUE, split.by="Strain")
+```
+
+#### c.2) Marcadores
+
+```{r}
+markers <- FindAllMarkers(object = bcells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+markers_filt <- dplyr::filter(markers, p_val_adj < 0.05 & markers$avg_log2FC > 0.2)
+
+topmarkers <- markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 5)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(bcells, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+#### c.3) UMAP: expresión de cadenas pesadas de inmunoglobulinas
+
+```{r, fig.width=8, fig.height=21}
+FeaturePlot(bcells, features = c("Ighm", "Ighd", "Igha", "Ighg1", "Ighg2b", "Ighg2c", "Ighg3"), reduction = "umap.bcells3", split.by="Strain")
+```
+
+
+#### c.4) Clasificación SingleR (ImmGenData)
+
+```{r, fig.width=10, fig.height=7}
+# Predicción SingleR
+Idents(bcells) <- bcells@meta.data$cluster_initial
+test_assay_b <- GetAssayData(bcells, slot = "data", assay = "SCT")
+pred_b <- SingleR(test=test_assay_b, ref=ref2, labels=ref2$label.fine, de.method = 'wilcox', clusters=Idents(bcells) )
+plotScoreHeatmap(pred_b, show_colnames = T)
+
+```
+
+#### c.4.1) Huella genética de PC y GC
+
+```{r, fig.height=3, fig.width=10}
+signatures_ucell <- list(
+    PC_signature = c("Jchain","Prdm1","Xbp1", "Sdc1", "Tnfrsf17", "Tnfrsf13b"),
+#    MBC_signature = c("", "", "", "", ""),
+#    BProlif_signature = c(""),
+    GC_signature = c("Aicda", "Ptprc", "Mki67", "Bach2", "Bcl6", "Ms4a1", "Pax5")
+)
+bcells <- AddModuleScore_UCell(bcells, features=signatures_ucell, name=NULL)
+FeaturePlot(bcells, reduction = "umap_sub", features = names(signatures_ucell), ncol=3)
+```
+
+
+#### c.5) UMAP definitivo
+
+```{r, fig.width=8, fig.height=5}
+# Etiquetamos los clusters 
+Idents(bcells) <- bcells@meta.data$cluster_initial
+labels <- c("B cells (Fo)", 
+            "B cells (Fo)", 
+            "B cells (Fo)", 
+            "B cells (Fo)", 
+            "B cells (Fo)", 
+            "B cells (Prolif.)", 
+            "B cells (ME)",
+            "B cells (PC-IgA)",
+            "B cells (PC-IgA)",
+            "B cells (Fo)",
+            "B cells (Prolif.)",
+            "B cells (ME)",
+            "B cells (PC-IgG2b/c)",
+            "B cells (PC-IgG1)",
+            "B cells (PB-IgA)",
+            "B cells (PC-IgM)",
+            "B cells (PC-IgA)",
+            "B cells (Fo)",
+            "B cells (PC-IgA)",
+            "Ambiguous",
+            "B cells (PC-IgD)") 
+new.ids.b <- labels
+names(new.ids.b) <- levels(bcells)
+bcells <- RenameIdents(bcells, new.ids.b)
+bcells$cluster_b_final <- Idents(bcells)
+
+# Umap
+DimPlot(bcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap.bcells3") +
+      theme(legend.position = 'right') 
+
+```
+
+```{r}
+# Guardamos los labels en "Clusters_subclusters_def" de main data
+Idents(data) <- data@meta.data$Clusters_subclusters_def
+Idents(data) <- bcells$cluster_b_final
+data@meta.data$Clusters_subclusters_def <- Idents(data)
+```
+
+
+
+# 4. Etiquetas finales
+
+```{r}
+# Reorganizamos superclusters según los subclusters que hemos definido en Clusters_subclusters_def, y los guardamos en Clusters_main_def
+clusters <- data$Clusters_subclusters_def
+clusters <- gsub(".*B cells.*", "B cells", clusters)
+clusters <- gsub(".*T cells.*", "T cells", clusters)
+clusters <- gsub(".*ILC.*", "ILC", clusters)
+clusters <- gsub(".*Monocytes.*", "Myeloid cells", clusters)
+clusters <- gsub(".*DC.*", "Myeloid cells", clusters)
+clusters <- gsub(".*Macrophages.*", "Myeloid cells", clusters)
+clusters <- gsub(".*Neutrophils.*", "Granulocytes", clusters)
+clusters <- gsub(".*Mast.*", "Granulocytes", clusters)
+clusters <- gsub(".*Eosino.*", "Granulocytes", clusters)
+data$Clusters_main_def <- clusters
+```
+
+## 4.1. Versión con epithelial cells y células ambiguas
+
+### Superclusters
+
+```{r, fig.width=8, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+      theme(legend.position = 'right') 
+```
+
+```{r, fig.width=12, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+### Subclusters
+
+```{r, fig.width=8, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+```{r, fig.width=12, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 4.2. Versión final sin células contaminantes
+
+```{r}
+# Filtramos el cluster de epithelial cells y los clusters con marcadores de B y T
+# Rehacemos normalización, PCA, clusters, umap
+data <- subset(x=data, Clusters_main_def != "Epithelial")
+data <- subset(x=data, Clusters_main_def != "Ambiguous")
+data$Clusters_subclusters_def <- droplevels(data$Clusters_subclusters_def)
+Idents(data) <- droplevels(Idents(data))
+data <- SCTransform(data, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(data)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+data <- RunPCA(data, features = hvg, verbose = FALSE)
+data <- FindNeighbors(data, dims = 1:18, verbose = FALSE)
+data <- FindClusters(data, verbose = FALSE, cluster.name = "umap_final", resolution = 0.7)
+data <- RunUMAP(data, dims = 1:18, reduction = "HarmonyIntegration", reduction.name = "umap_final", verbose = FALSE)
+Idents(data) <- data$Clusters_subclusters_def
+```
+
+
+### Superclusters
+
+```{r, fig.width=8, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+      theme(legend.position = 'right') 
+```
+
+```{r, fig.width=12, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+### Subclusters
+
+```{r, fig.width=8, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+```{r, fig.width=12, fig.height=5}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+
+# 5. Comprobaciones: marcadores específicos
+
+```{r, fig.width=20, fig.height=6}
+# Cargamos tabla de marcadores para la comprobación
+cellmarkers <- read.xlsx("./Datos/cellmarkers.xlsx")
+markerlist <- split(cellmarkers$Gene, cellmarkers$ID)
+markerlist <- markerlist[unique(cellmarkers$ID)]
+# Ordenamos niveles de subclusters de data
+levels(data) <- c(
+  "B cells (Fo)",
+  "B cells (ME)",
+  "B cells (Prolif.)",
+  "B cells (PB-IgA)",
+  "B cells (PC-IgA)",
+  "B cells (PC-IgG1)",
+  "B cells (PC-IgG2b/c)",
+  "B cells (PC-IgM)",
+  "B cells (PC-IgD)",
+  "T cells (DN2)",
+  "T cells (Naive)",
+  "T cells (CD4+ Fol.h)",
+  "T cells (Th2)",
+  "T cells (CD4+ MEM)",
+  "T cells (CD4+ Tregs)",
+  "T cells (CD8+ TC1)",
+  "T cells (CD8+ TC22)",
+  "T cells (Unknown)",
+  "NK",
+  "Monocytes",
+  "Neutrophils",
+  "Eosinophils",
+  "Mast cells",
+  "DC (pDC)",
+  "DC (cDC)",
+  "Macrophages",
+  "ILC (ILC2)",
+  "ILC (ILC3)",
+  "Epithelial"
+)
+# Dotplot
+dotp2 <- DotPlot(data, markerlist, assay="SCT")
+dotp2 + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+```{r}
+# Establecemos un número para cada supercluster, para representación gráfica
+# Lo guardamos en Clusters_main_def_numeric 
+tabnumber <- data.frame(
+  Clusters_main_def = unique(data$Clusters_main_def)[order(unique(data$Clusters_main_def))],
+  Clusters_main_def_numeric = seq(1:length(unique(data$Clusters_main_def)))
+)
+f <- data.frame(Clusters_main_def = data$Clusters_main_def) %>% left_join(tabnumber, by="Clusters_main_def")
+data$Clusters_main_def_numeric <- f$Clusters_main_def_numeric
+```
+
+```{r}
+# Establecemos un número para cada subcluster, para representación gráfica
+# Lo guardamos en Clusters_subclusters_def_numeric
+tabnumber <- data.frame(
+  Clusters_subclusters_def = unique(data$Clusters_subclusters_def)[order(unique(data$Clusters_subclusters_def))],
+  Clusters_subclusters_def_numeric = seq(1:length(unique(data$Clusters_subclusters_def)))
+)
+f <- data.frame(Clusters_subclusters_def = data$Clusters_subclusters_def) %>% left_join(tabnumber, by="Clusters_subclusters_def")
+data$Clusters_subclusters_def_numeric <- f$Clusters_subclusters_def_numeric
+```
+
+
+```{r}
+# Guardamos datos con etiquetas
+saveRDS(data, "./Datos/WT_IgAKO_anotado.rds")
+```
+
+```{r}
+# Guardamos datos b cells actualizados, con etiquetas
+bcells <- subset(x=data, Clusters_main_def == "B cells")
+bcells <- SCTransform(bcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(bcells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+bcells <- RunPCA(bcells, features = hvg, verbose = FALSE)
+bcells <- FindNeighbors(bcells, dims = 1:18, verbose = FALSE)
+bcells <- FindClusters(bcells, verbose = FALSE, cluster.name = "umap_sub", resolution = 0.7)
+bcells <- RunUMAP(bcells, dims = 1:18, reduction.name = "umap_sub", verbose = FALSE)
+
+saveRDS(bcells, "./Datos/WT_IgAKO_bcells.rds")
+```
+
+```{r}
+# Guardamos datos t cells actualizados, con etiquetas
+tcells <- subset(x=data, Clusters_main_def %in% c("T cells", "ILC", "NK"))
+tcells <- SCTransform(tcells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(tcells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+tcells <- RunPCA(tcells, features = hvg, verbose = FALSE)
+tcells <- FindNeighbors(tcells, dims = 1:18, verbose = FALSE)
+tcells <- FindClusters(tcells, verbose = FALSE, cluster.name = "umap_sub", resolution = 0.7)
+tcells <- RunUMAP(tcells, dims = 1:18, reduction.name = "umap_sub", verbose = FALSE)
+
+saveRDS(tcells, "./Datos/WT_IgAKO_tcells.rds")
+```
+
+```{r}
+# Guardamos datos myeloid cells actualizados, con etiquetas
+mycells <- subset(x=data, Clusters_main_def %in% c("Myeloid cells", "Granulocytes"))
+mycells <- SCTransform(mycells, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(mycells)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+mycells <- RunPCA(mycells, features = hvg, verbose = FALSE)
+#ElbowPlot(tcells)
+mycells <- FindNeighbors(mycells, dims = 1:18, verbose = FALSE)
+mycells <- FindClusters(mycells, verbose = FALSE, cluster.name = "umap_sub", resolution = 0.7)
+mycells <- RunUMAP(mycells, dims = 1:18, reduction.name = "umap_sub", verbose = FALSE)
+
+saveRDS(mycells, "./Datos/WT_IgAKO_mycells.rds")
+```
+
+
+

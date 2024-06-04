@@ -1,0 +1,418 @@
+---
+title: '4: Strain comparison'
+author: "Celia Corral-Vázquez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r}
+library(rstatix)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(ggpubr)
+library(enrichplot)
+library(clusterProfiler)
+library(clusterProfiler.dplyr)
+library(openxlsx)
+library(PPInfer)
+library(stringr)
+```
+
+
+# 1. Descripción de las muestras:
+
+# 2. Metodologia 
+
+## 2.1. Previa
+
+## 2.2. Actual
+
+```{r}
+# Leemos datos
+data <- readRDS("./Datos/WT_IgAKO_anotado.rds")
+Idents(data) <- data$Clusters_subclusters_def
+bcells <- readRDS("./Datos/WT_IgAKO_bcells.rds")
+Idents(bcells) <- bcells$Clusters_subclusters_def
+tcells <- readRDS("./Datos/WT_IgAKO_tcells.rds")
+Idents(tcells) <- tcells$Clusters_subclusters_def
+mycells <- readRDS("./Datos/WT_IgAKO_mycells.rds")
+Idents(mycells) <- mycells$Clusters_subclusters_def
+```
+
+
+```{r}
+# Establecemos colores para WT y IgA-KO
+strain_colors <- c("#79ccb3", "#e9724d")
+```
+
+
+# 3. ### Nº genes diferencialmente expresados por cluster
+
+```{r}
+# Creamos datos pseudobulk de los counts, basados en cepa-muestra-subcluster
+pseudo_data <- AggregateExpression(data, assays = "SCT", return.seurat = T, group.by = c("Strain", "Sample_id", "Clusters_subclusters_def"))
+# En estos datos, cada "célula" es ahora un perfil de cepa-muestra-subcluster
+pseudo_data$celltype.strain <- paste(pseudo_data$Clusters_subclusters_def, pseudo_data$Strain, sep = "_")
+Idents(pseudo_data) <- "celltype.strain"
+
+# DE genes (DESeq2)
+delist <- data.frame(
+)
+for (i in 1:length(unique(data$Clusters_subclusters_def))) {
+  ref <- paste0(unique(data$Clusters_subclusters_def)[i], "_WT")
+  comp <- paste0(unique(data$Clusters_subclusters_def)[i], "_IgAKO")
+  bulk.mono.de <- FindMarkers(object = pseudo_data, 
+                         ident.1 = comp, 
+                         ident.2 = ref,
+                         test.use = "DESeq2",
+                         min.cells.feature = 2,
+                         min.cells.group = 2)
+  bulk.mono.de$DE <- "No"
+  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC > 0.585] <- "Up"
+  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC < -0.585] <- "Down"
+  bulk.mono.de$gene <- rownames(bulk.mono.de)
+  bulk.mono.de$cluster <- unique(data$Clusters_subclusters_def)[i]
+  delist <- rbind(delist, bulk.mono.de)
+}
+# Guardamos los DE en un excel
+write.xlsx(delist, "./Resultados/DE_genes_WT_IgAKO.xlsx")
+```
+
+```{r}
+# Barplot nº genes sobre e infraexpresados
+# Datos
+funbarde <- function(data){
+  delist <- dplyr::filter(delist, cluster %in% Idents(data))
+  tabde <- as.data.frame(table(delist$cluster, delist$DE))
+  colnames(tabde) <- c("Cluster", "DE", "N")
+  tabde <- dplyr::filter(tabde, DE != "No")
+  tabde$N[tabde$DE =="Down"] <- tabde$N * -1
+  tabde <- tabde %>% dplyr::filter(N != 0 & Cluster != "B cells (PC-IgA)" & Cluster != "B cells (PB-IgA)")
+  # Plot
+  ggplot(data = tabde, aes(y = N, x = Cluster, fill = N < 0)) +
+    geom_col() +
+    coord_flip() + 
+    scale_fill_manual(values = rev(strain_colors)) +
+    theme_minimal() + theme(legend.position = "none") + ylab("N genes diferencialmente expresados") + xlab("")
+}
+funbarde(data)
+```
+
+
+# 4. Análisis diferencial por supercluster
+
+## 4.1. B cells
+
+### a) Proporciones celulares
+
+```{r}
+# Función para obtener tabla de info de fracciones celulares
+fun_wilcoxon <- function(subset) {
+  clusters <- unique(subset$Clusters_subclusters_def)
+  tablilla <- as.data.frame(table(
+    data$Sample_id,
+    data$Clusters_subclusters_def))
+  colnames(tablilla) <- c("Sample", "Subcluster", "N")
+  #tablilla <- tablilla[tablilla$N != 0,]
+  tablilla$Strain <- stringr::str_match(tablilla$Sample, '_(.*)')[, 2]
+  tablilla$Strain <- factor(tablilla$Strain, levels = c("WT", "IgAKO"))
+  
+  tablilla <- tablilla %>% 
+    group_by(Sample) %>% 
+    mutate(Ntotal= sum(N)) %>%
+    group_by(Subcluster) %>% 
+    mutate(N.Perc= N / Ntotal)
+
+    tablilla <- dplyr::filter(tablilla, Subcluster %in% clusters)
+  tablilla <- tablilla %>% 
+    ungroup() %>%
+    group_by(Subcluster) %>% 
+    filter(sum(N.Perc) > 0)
+  tablilla$Subcluster <- droplevels(tablilla$Subcluster)
+  return(tablilla)
+}
+# Función para crear barplot de fracción celular con p-valor de comparación Wilcoxon (IgA-KO - WT)
+barplot_fun <- function(e) {
+    bp <- ggbarplot(
+    e, x = "Subcluster", y = "N.Perc", add = c("mean_se", "point"), 
+    color= "black", fill = "Strain", palette = strain_colors,
+    position = position_dodge(0.8),
+    ylab = "Fraction of cells",
+    xlab = "",
+    ) + rotate_x_text(90)
+  
+  stat.test <- e %>%
+    group_by(Subcluster) %>%
+    wilcox_test(N.Perc ~ Strain) %>%
+    add_significance("p")
+  
+  stat.test <- stat.test %>%
+    add_xy_position(fun = "mean", x = "Subcluster", dodge = 0.9, scales = "free") 
+  stat.test$y.position <- stat.test$y.position + 0.1
+  
+  bp + stat_pvalue_manual(
+    stat.test,  label = "p", tip.length = 0.01
+    )
+}
+```
+
+```{r}
+# Funciones fracciones celulares
+bprop <- fun_wilcoxon(bcells)
+barplot_fun(bprop)
+```
+
+### b) DGE: nº genes DE por cluster y top genes up/down regulados
+
+```{r, fig.width=5, fig.height=5}
+funbarde(bcells)
+```
+
+
+```{r}
+functionDE <- function(subset) {
+  for (i in 1:length(unique(Idents(subset)))){
+    de <- dplyr::filter(delist, cluster %in% unique(Idents(subset))[i] & DE != "No")
+    if (nrow(de) > 0) {
+      Genes <- rbind(top_n(de[de$DE == "Up",], 5, avg_log2FC), top_n(de[de$DE == "Down",], -5, avg_log2FC))
+      print(as.character(unique(Idents(subset))[i]))
+      print(ggplot(data = Genes, aes(y = avg_log2FC, x = reorder(gene, avg_log2FC) , fill = avg_log2FC < 0)) +
+        geom_col() +
+        coord_flip() + 
+        scale_fill_manual(values = rev(strain_colors)) +
+        theme_minimal() + theme(legend.position = "none") + ylab("Media de log2FC") + xlab("Genes diferencialmente expresados")
+    )
+    }
+  }
+}
+```
+
+```{r}
+functionDE(bcells)
+```
+
+
+### c) GSEA: top GO terms (BP)
+
+```{r}
+# Cargamos la base de datos del organismo
+organism = "org.Mm.eg.db"
+#BiocManager::install(organism, character.only = TRUE)
+library(organism, character.only = TRUE)
+
+# Settings
+delist$cluster <- as.character(delist$cluster)
+options(enrichplot.colours = rev(strain_colors))
+
+# Función para crear lista de resultados de GSEA (GO)
+functionGSEA <- function(datasubset, clustername){
+  clusters <-  unique(Idents(datasubset))
+  gsealist <- list()
+  gsealistdf <- list()
+  for (i in 1:length(clusters)){
+    df <- dplyr::filter(delist, cluster == clusters[i])
+    original_gene_list <- sign(df$avg_log2FC) * -log10(df$p_val)
+    names(original_gene_list) <- df$gene
+    gene_list <- na.omit(original_gene_list)
+    gene_list = sort(gene_list, decreasing = TRUE)
+    enrichgo <- gseGO(gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             nPerm = 10000, 
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             pvalueCutoff = 0.1, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+    #enrichgo <- simplify(enrichgo)
+    gsealist[[i]] <- enrichgo
+    gsealistdf[[i]] <- as.data.frame(enrichgo)
+  }
+  names(gsealist) <- clusters
+  names(gsealistdf) <- clusters
+  setwd("Resultados/")
+  write.xlsx(gsealistdf, paste0("GSEA_GO_IgAKO_WT_", clustername, ".xlsx"))
+  return(gsealist)
+}
+
+# Función para crear lista con dotplots de resultados GSEA
+dotplotfun <- function(gsea){
+  gsea <- Filter(function(x) nrow(x) > 0, gsea)
+  listdotplot <- list()
+  
+  for (i in 1:length(gsea)){
+      p <- dotplot(gsea[[i]], label_format = 50, showCategory = 10, color = "pvalue", split=".sign") + 
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +  
+        facet_grid(~.sign)
+      listdotplot[[i]] <- p
+  }
+  names(listdotplot) <- names(gsea)
+  return(listdotplot)
+}
+
+barplotfun <- function(gsea){
+  gsea <- Filter(function(x) nrow(x) > 0, gsea)
+  listbarplot <- list()
+  
+  for (i in 1:length(gsea)){
+      dfpos <-as.data.frame(gsea[[i]]) %>% dplyr::filter(NES > 0)
+      dfneg <-as.data.frame(gsea[[i]]) %>% dplyr::filter(NES < 0)
+      Genes <- rbind(top_n(dfpos, 10, NES), top_n(dfneg, -10, NES))
+      Genes$Description <- str_wrap(Genes$Description, width = 50)
+      p <- ggplot(data = Genes, aes(y = NES, x = reorder(Description, NES), fill = pvalue)) +
+        geom_col() +
+        coord_flip() + 
+#        scale_fill_gradient(values = rev(strain_colors)) +
+        scale_fill_gradientn(colours = rev(strain_colors), guide = guide_colorbar(reverse=TRUE)) +
+        theme_minimal() + ylab("NES") + xlab("")
+      listbarplot[[i]] <- p
+  }
+  names(listbarplot) <- names(gsea)
+  return(listbarplot)
+}
+
+# Función para representar la lista de dotplots
+plotplots <- function(dotplotlist, barplotlist){
+  for (i in 1:length(dotplotlist)){
+      print(names(dotplotlist)[i])
+      print(dotplotlist[[i]])
+      print(barplotlist[[i]])
+  }
+}
+```
+
+
+```{r}
+# Funciones GSEA
+bgsea <- functionGSEA(bcells, "bcells")
+bp <- dotplotfun(bgsea)
+bb <- barplotfun(bgsea)
+plotplots(bp, bb)
+```
+
+
+### d) Expresión de cadenas pesadas de Ig
+
+```{r, fig.height=6, fig.width=8}
+# Función para hacer violin plot con comparación wilcoxon (IgA-KO - WT)
+vp_case1 <- function(gene_signature, file_name, test_sign, y_max){
+  plot_case1 <- function(signature){
+    VlnPlot(bcells, features = signature,
+            pt.size = 0.0, 
+           group.by = "Strain", 
+           cols = strain_colors,
+            y.max = y_max # add the y-axis maximum value - otherwise p-value hidden
+    ) + stat_compare_means(comparisons = test_sign, label = "p.signif", method = "wilcox.test") +
+      xlab("") + theme(legend.position = "none")
+  }
+  purrr::map(gene_signature, plot_case1) %>% cowplot::plot_grid(plotlist = .)
+}
+
+# Corremos la función
+vp_case1(gene_signature = c("Igha", "Ighd", "Ighm", "Ighg1", "Ighg2b", "Ighg2c"), test_sign = list(c("WT", "IgAKO")) , y_max = 9)
+```
+
+
+
+## 4.2. T cells, ILC cells y NK
+
+### a) Proporciones celulares
+
+```{r}
+# Funciones proporciones celulares
+tprop <- fun_wilcoxon(tcells)
+barplot_fun(tprop)
+```
+
+### b) DGE: nº genes DE por cluster y top genes up/down regulados
+
+```{r, fig.width=5, fig.height=5}
+funbarde(tcells)
+```
+
+```{r}
+functionDE(tcells)
+```
+
+### c) GSEA: top GO terms (BP)
+
+```{r, fig.height=7, fig.width=7}
+# Funciones GSEA
+tgsea <- functionGSEA(tcells, "tcells")
+tp <- dotplotfun(tgsea)
+tb <- barplotfun(tgsea)
+plotplots(tp, tb)
+```
+
+
+
+## 4.3. Myeloid cells y Granulocitos
+
+### a) Proporciones celulares
+
+```{r}
+# Funciones proporciones celulares
+mprop <- fun_wilcoxon(mycells)
+barplot_fun(mprop)
+```
+
+### b) DGE: nº genes DE por cluster y top genes up/down regulados
+
+```{r, fig.width=5, fig.height=5}
+funbarde(mycells)
+```
+
+```{r}
+functionDE(mycells)
+```
+
+### c) GSEA: to GO terms (BP)
+
+```{r, fig.height=9, fig.width=7}
+# Funciones GSEA
+mgsea <- functionGSEA(mycells, "mycells")
+mp <- dotplotfun(mgsea)
+mb <- barplotfun(mgsea)
+plotplots(mp, mb)
+```
+
+
+# GO terms significativos específicas (en construcción)
+
+```{r}
+barplotfun_specific <- function(gsea, clusters, GO_ids){
+  gsea <- gsea[names(gsea) %in% clusters]
+  listbarplot <- list()
+  
+  for (i in 1:length(gsea)){
+      Genes <- as.data.frame(gsea[[i]]) %>% dplyr::filter(ID %in% GO_ids)
+      Genes$Description <- str_wrap(Genes$Description, width = 50)
+      p <- ggplot(data = Genes, aes(y = NES, x = reorder(Description, NES), fill = pvalue)) +
+        geom_col() +
+        coord_flip() + 
+#        scale_fill_gradient(values = rev(strain_colors)) +
+        scale_fill_gradientn(colours = rev(strain_colors), guide = guide_colorbar(reverse=TRUE)) +
+        theme_minimal() + ylab("NES") + xlab("")
+      listbarplot[[i]] <- p
+  }
+  names(listbarplot) <- names(gsea)
+  for (i in 1:length(listbarplot)){
+      print(names(listbarplot)[i])
+      print(listbarplot[[i]])
+  }
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+barplotfun_specific(mgsea, "Macrophages", c("GO:0051897", "GO:0009142", "GO:1905322"))
+```
+

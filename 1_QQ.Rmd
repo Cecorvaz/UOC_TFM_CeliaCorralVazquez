@@ -1,0 +1,380 @@
+---
+title: 'Informe 1: Controles de calidad, procesamiento inicial e integración'
+author: "Celia Corral-Vázquez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(knitr)
+library(scCustomize)
+library(stringr)
+```
+
+# 1. Descripción de las muestras y metodología
+
+6 muestras de células mononucleares (CD45+) de lámina propia de intestino delgado de ratón.
+
+Se analizaron dos cepas de ratón:
+
+* Wiltype (WT) (n = 3)
+
+* IgA *knockout* (IgA-KO) (n = 3)
+
+Análisis *single-cell RNA-seq*:
+
+* Procesamiento de datos: Cell ranger v.6.1
+
+* Genoma de referencia: refdata-gex-mm10-2020-A
+
+Análisis de los datos: paquete de R *Seurat* v5.
+
+# 2. Controles de calidad 
+
+```{r}
+# Carpeta donde están los archivos rds de los objetos seurat de cada muestra
+folder <- "/run/user/1000/gvfs/smb-share:server=folder.imim.es,share=bcell/LAb members DATA/Celia/2024_scRNAseq_mice_LP/seurat/"
+# Leer los nombres de archivos
+files <- list.files(folder)
+# Nos quedamos con los que tengan WT o IgAKO en el nombre
+files <- Filter(function(x) any(grepl("WT|IgAKO", x)), files)
+names <- str_extract(files, "[^.rds]+")
+strain <- sub('.*_', '', names)
+# Cargamos los archivos en una lista
+data0 <- list()
+for (i in 1:length(files)){
+  data0[i] <- readRDS(paste0(folder, files[i]))
+}
+```
+
+```{r}
+# Unir todos los archivos en el objeto data
+data <- merge(x=data0[[1]], y = list(data0[[2]], data0[[3]], data0[[4]], data0[[5]], data0[[6]]), add.cell.ids = names)
+Idents(data) <- data$Sample_id
+```
+
+
+## 2.1. Estadísticas antes del filtrado de células
+
+### a) Info general
+
+```{r}
+# Función para crear tabla descriptiva de los parámetros básicos
+fun_description <- function(data){
+  cols <- c("range1", "range2")
+  strain <- as.data.frame(table(data$Sample_id, data$Strain)); strain[strain==0] <- NA; strain<-strain[complete.cases(strain),]
+  colnames(strain) <- c("Sample", "Strain", "Cells")
+  ncount_mean <- aggregate(data$nCount_RNA, list(data$Sample_id), FUN=mean); colnames(ncount_mean) <- c("Sample", "nCount_mean")
+  total <- left_join(strain, ncount_mean, by="Sample")
+  ncount_range1 <- aggregate(data$nCount_RNA, list(data$Sample_id), FUN=min); colnames(ncount_range1) <- c("Sample", "nCount_min")
+  total <- left_join(total, ncount_range1, by="Sample")
+  ncount_range2 <- aggregate(data$nCount_RNA, list(data$Sample_id), FUN=max); colnames(ncount_range2) <- c("Sample", "nCount_max")
+  total <- left_join(total, ncount_range2, by="Sample")
+  nfeature_mean <- aggregate(data$nFeature_RNA, list(data$Sample_id), FUN=mean); colnames(nfeature_mean) <- c("Sample", "nFeature_mean")
+  total <- left_join(total, nfeature_mean, by="Sample")
+  nfeature_range1 <- aggregate(data$nFeature_RNA, list(data$Sample_id), FUN=min); colnames(nfeature_range1) <- c("Sample", "nFeature_min")
+  total <- left_join(total, nfeature_range1, by="Sample")
+  nfeature_range2 <- aggregate(data$nFeature_RNA, list(data$Sample_id), FUN=max); colnames(nfeature_range2) <- c("Sample", "nFeature_max")
+  total <- left_join(total, nfeature_range2, by="Sample")
+  
+  kable(total)
+
+}
+
+# La aplicamos a los datos antes de filtrar
+fun_description(data)
+
+```
+
+### b) Gráficos {.tabset}
+
+#### Features 
+
+```{r}
+  VlnPlot(data, features = "nFeature_RNA", pt.size = 0.01) & ggtitle("n Feature RNA")
+```
+
+#### Counts
+
+```{r}
+  VlnPlot(data, features = "nCount_RNA", pt.size = 0.01) & ggtitle("n Counts RNA")
+```
+
+#### % genes mitocondriales 
+
+```{r}
+data[["percent.mt"]] <- PercentageFeatureSet(data, pattern = "^mt-")
+VlnPlot(data, features = "percent.mt", pt.size = 0.01) & ggtitle("% MT")
+```
+
+#### Features / counts 
+
+```{r}
+FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") & ggtitle("N Features per n count")
+```
+
+#### % genes mitocontriales / counts
+
+```{r}
+FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "percent.mt") & ggtitle("% MT per n count")
+```
+
+## 2.2. Criterio de filtrado
+
+```{r}
+filter_nfeature_min = 200
+filter_nfeature_max = 5000
+filter_mt_max = 5
+filter_ncount_max = 75000
+filter_ncount_malat1 = 100
+```
+
+* Número mínimo de features (RNA): `r filter_nfeature_min`
+* Número máximo de features (RNA): `r filter_nfeature_max`
+* Porcentaje máximo de genes mitocontriales: `r filter_mt_max`
+* Número máximo de counts: `r filter_ncount_max`
+
+## 2.3. Estadísticas después del filtrado
+
+```{r}
+# Aplicamos el filtering con los valores que hemos establecido
+data <- subset(data, subset = nFeature_RNA > filter_nfeature_min & nFeature_RNA < filter_nfeature_max & percent.mt < filter_mt_max & nCount_RNA < filter_ncount_max)
+```
+
+### a) Info general
+
+```{r}
+# Aplicamos función de descripción a los datos filtrados
+fun_description(data)
+```
+
+### b) Gráficos {.tabset}
+
+#### Features 
+
+```{r}
+  VlnPlot(data, features = "nFeature_RNA", pt.size = 0.01) & ggtitle("n Feature RNA")
+```
+
+#### Counts
+
+```{r}
+  VlnPlot(data, features = "nCount_RNA", pt.size = 0.01) & ggtitle("n Counts RNA")
+```
+
+#### % genes mitocondriales 
+
+```{r}
+VlnPlot(data, features = "percent.mt", pt.size = 0.01) & ggtitle("% MT")
+```
+
+#### Features / counts 
+
+```{r}
+FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") & ggtitle("N Features per n count")
+```
+
+#### % genes mitocontriales / counts
+
+```{r}
+FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "percent.mt") & ggtitle("% MT per n count")
+```
+
+
+
+
+
+# 3. Integración
+
+Los diferentes *dataset* en formato de objeto *Seurat* se sometieron a un *merging* y a una normalización mediante el método *SCTransform*.
+
+Luego, antes de proceder a la integración de los datasets, se realizó una reducción de dimensiones de los datos mediante *Principal Component Analysis* (PCA), del cual se seleccionaron algunas dimensiones para los análisis subsecuentes tomando como base el Elbow plot del PCA (ver apartado 3.1).
+
+La integración de los datos se realizó siguiendo tres métodos diferentes: Harmony, CCA y RPCA. Se realizó una reducción visual de los datos mediante UMAP antes y después de las distintas integraciones para ofrecer una representación preliminar de un posible clustering de los datos (la resolución óptima se estudiará más adelante).
+
+## 3.1 PCA
+
+```{r}
+# Normalización SCTransform y PCA
+data <- SCTransform(data, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+data <- RunPCA(data, verbose = FALSE)
+ElbowPlot(data)
+```
+
+```{r}
+# Establecemos nº dimensiones y resolución
+npca <- 18
+res <- 0.1
+```
+
+* Número de dimensiones elegidas: `r npca`
+* Resolución UMAP: `r res`
+
+## 3.2. Antes de la integración de las muestras
+
+### Umap previo a la integración
+
+```{r}
+# Calculamos los clusters y el UMAP
+data <- FindNeighbors(data, dims = 1:npca, verbose = FALSE)
+data <- FindClusters(data, verbose = FALSE, cluster.name = "unintegrated_clusters", resolution = res)
+data <- RunUMAP(data, dims = 1:npca, reduction.name = "umap.unintegrated", verbose = FALSE)
+```
+
+```{r}
+folder <- "/run/user/1000/gvfs/smb-share:server=folder.imim.es,share=bcell/LAb members DATA/Celia/2024_scRNAseq_mice_LP/Results/"
+data <- readRDS(paste0(folder, "WT_IgAKO_integrado.rds"))
+data <- FindClusters(data, verbose = FALSE, cluster.name = "unintegrated_clusters", resolution = res)
+data <- RunUMAP(data, dims = 1:npca, reduction.name = "umap.unintegrated", verbose = FALSE)
+```
+
+
+```{r, fig.width=10, fig.height=8}
+DimPlot(data, reduction = "umap.unintegrated", group.by = c("Sample_id", "Strain", "seurat_clusters"), ncol=2)
+```
+
+
+## 3.3. Pruebas de integración {.tabset}
+
+### a) Harmony integration
+
+```{r eval=FALSE, include=FALSE, results=F}
+# Integramos layers con Harmony
+# options(future.globals.maxSize = 1000 * 1024^2)
+data <- IntegrateLayers(object = data, method = HarmonyIntegration, orig.reduction = "pca", new.reduction = "HarmonyIntegration", assay = "SCT", verbose = FALSE)
+
+# Cluster y Umap
+data <- FindNeighbors(data, reduction = "HarmonyIntegration", dims = 1:npca)
+data <- FindClusters(data, resolution = res)
+data <- RunUMAP(data, dims = 1:npca, reduction = "HarmonyIntegration", verbose = F, reduction.name = "umap_harmony")
+```
+
+#### UMAP completo
+
+```{r, fig.width=10, fig.height=8}
+DimPlot(data, reduction = "umap_harmony", group.by = c("Sample_id", "Strain", "seurat_clusters"), ncol=2)
+```
+
+#### UMAP por cepa
+
+```{r, fig.width=8, fig.height=4}
+DimPlot(data, reduction = "umap_harmony", split.by = "Strain")
+```
+
+#### UMAP por muestra
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, reduction = "umap_harmony", split.by = "Sample_id", ncol = 3)
+```
+
+### b) CCA integration 
+
+```{r eval=FALSE, include=FALSE, results=F}
+# Integramos layers con CCA
+#options(future.globals.maxSize = 1000 * 1024^2)
+data <- IntegrateLayers(object = data, method = CCAIntegration, orig.reduction = "pca", new.reduction = "CCAIntegration", normalization.method  = "SCT", verbose = FALSE)
+
+# Clusters y UMAP
+data <- FindNeighbors(data, reduction = "CCAIntegration", dims = 1:npca)
+data <- FindClusters(data, resolution = res)
+data <- RunUMAP(data, dims = 1:npca, reduction = "CCAIntegration", verbose = F, reduction.name = "umap_cca")
+```
+
+#### UMAP completo
+
+```{r, fig.width=10, fig.height=8}
+DimPlot(data, reduction = "umap_cca", group.by = c("Sample_id", "Strain", "seurat_clusters"), ncol = 2)
+```
+
+#### UMAP por cepa
+
+```{r, fig.width=8, fig.height=4}
+DimPlot(data, reduction = "umap_cca", split.by = "Strain")
+```
+
+#### UMAP por muestra
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, reduction = "umap_cca", split.by = "Sample_id", ncol = 3)
+```
+
+### c) RPCA integration 
+
+```{r eval=FALSE, include=FALSE, results=F}
+# Integramos layers con RPCA
+options(future.globals.maxSize = 10000 * 1024^2)
+data <- IntegrateLayers(object = data, method = RPCAIntegration, orig.reduction = "pca", new.reduction = "RPCAIntegration", normalization.method  = "SCT", verbose = FALSE)
+# Clusters y UMAP
+data <- FindNeighbors(data, reduction = "RPCAIntegration", dims = 1:npca)
+data <- FindClusters(data, resolution = res)
+data <- RunUMAP(data, dims = 1:npca, reduction = "RPCAIntegration", verbose = F, reduction.name = "umap_rpca")
+```
+
+#### UMAP completo
+
+```{r, fig.width=10, fig.height=8}
+DimPlot(data, reduction = "umap_rpca", group.by = c("Sample_id", "Strain", "seurat_clusters"), ncol=2)
+```
+
+#### UMAP por cepa
+
+```{r, fig.width=8, fig.height=4}
+DimPlot(data, reduction = "umap_rpca", split.by = "Strain")
+```
+
+#### UMAP por muestra
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, reduction = "umap_rpca", split.by = "Sample_id", ncol = 3)
+```
+
+
+
+# 4. Controles adicionales: expresión de Malat1
+
+Finalmente, se eligió la integración mediante el método Harmony para realizar los análisis consecuentes.
+
+La expresión del gen *Malat1* se ha asociado a la presencia/ausencia de intrones en datasets de expresión, y el estudio de su nivel de expresión se ha propuesto como medida adicional de calidad.
+
+En este caso, nos basaremos en el estudio de Monstserrat Ayuso y Esteve-Codina y reflejaremos las células divididas en tres grupos: a) "cells" (expresión normalizada de *Malat1* esperable, entre 0 y 3.5), b) *Cytosolic debris* (expresión de 0), y c) *Nuclei enriched* (expresión >3.5).
+
+## 4.1. Grupo de "cells" (entre 0 y 3.5 counts)
+
+```{r, fig.width=10, fig.height=4}
+FeaturePlot(data, features = "Malat1", reduction = "umap_harmony", split.by="Strain", max.cutoff = 3.5, pt.size = 0.1) +
+      theme(legend.position = 'right') 
+```
+
+## 4.2. Grupo de "cytosolic debris" (0 counts)
+
+Las células con 0 counts aparecen destacadas en azul.
+
+```{r, fig.width=10, fig.height=4}
+#cells0malat <- subset(data, Malat1 == 0)
+FeaturePlot_scCustom(data, features = "Malat1", reduction = "umap_harmony", split.by="Strain", pt.size = 0.1, na_color = "blue", colors_use = c("lightgrey", "lightgrey"))  +
+      theme(legend.position = 'right') 
+```
+
+## 4.3. Grupo de "nuclei enriched" (más de 3.5 counts)
+
+```{r, fig.width=10, fig.height=4}
+FeaturePlot(data, features = "Malat1", reduction = "umap_harmony", split.by="Strain", min.cutoff = 3.5) +
+      theme(legend.position = 'right') 
+```
+
+```{r}
+# Guardamos datos integrados
+saveRDS(data, "./Datos/WT_IgAKO_integrado.rds")
+```
+

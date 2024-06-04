@@ -1,0 +1,772 @@
+---
+title: "3: descripción del atlas celular"
+author: "Celia Corral-Vázquez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(knitr)
+library(scCustomize)
+library(stringr)
+library(clustree)
+library(celldex)
+library(SingleR)
+library(pheatmap)
+library(HGNChelper)
+library(tidyverse)
+library(reshape2)
+library(moonBook)
+library(webr)
+library(openxlsx)
+library(clusterProfiler)
+library(clusterProfiler.dplyr)
+library(DOSE)
+library(ggsignif)
+library(ggrepel)
+```
+
+```{r}
+# Leemos data y datasets de superclusters
+data <- readRDS("./Datos/WT_IgAKO_anotado.rds")
+bcells <- readRDS("./Datos/WT_IgAKO_bcells.rds")
+tcells <- readRDS("./Datos/WT_IgAKO_tcells.rds")
+mycells <- readRDS("./Datos/WT_IgAKO_mycells.rds")
+```
+
+# 1. Clusters generales
+
+## 1.1. UMAP 
+
+### Completo {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def_numeric") +
+      theme(legend.position = 'right') 
+```
+
+### Por cepa  {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def_numeric", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 1.2. Proporción celular 
+
+### Completo
+
+```{r, fig.width=8, fig.height=8}
+# Donutplot: creamos tabla
+dfdonut <- as.data.frame(table(
+  data@meta.data$Clusters_main_def,
+  data@meta.data$Clusters_subclusters_def
+))
+colnames(dfdonut) <- c("Main", "Secondary", "N")
+
+# Donut plot
+PieDonut(dfdonut,
+         aes(pies= Main, 
+             #donuts = Secondary, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = T,
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
+
+```
+
+
+### Por cepa
+
+```{r, fig.width=4, fig.height=5}
+# Barplot: creamos tabla
+dfbarplot_general <- as.data.frame(table(
+  data@meta.data$Clusters_main_def,
+  data@meta.data$Strain
+))
+colnames(dfbarplot_general) <- c("Main", "Strain", "N")
+
+# Barplot
+ggplot(dfbarplot_general, aes(fill=Main, y=N, x=Strain)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal() +
+  labs(x = "", y = "Fraction of cells") 
+```
+
+```{r eval=FALSE, fig.height=5, fig.width=8, include=FALSE}
+# Barplot: creamos tabla
+dfbarplot_general2 <- as.data.frame(table(
+  data@meta.data$Clusters_main_def,
+  data@meta.data$Strain
+))
+colnames(dfbarplot_general2) <- c("Main", "Strain", "N")
+dfbarplot_general2 <- dfbarplot_general2[dfbarplot_general2$N != 0,]
+dfbarplot_general2 <- dfbarplot_general2 %>% 
+  group_by(Strain) %>% 
+  mutate(N.Perc= N / sum(N))
+
+# Barplot
+ggplot(dfbarplot_general2, aes(x=Main, y=N.Perc, fill = Strain)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 0.8) +
+  labs(x = "", y = "Fraction of cells") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+```
+
+
+## 1.3. Principales marcadores
+
+```{r, fig.width = 15, fig.height=4}
+Idents(data) <- data@meta.data$Clusters_main_def
+data <- PrepSCTFindMarkers(data, verbose = F)
+main_markers <- FindAllMarkers(object = data,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+main_markers$Supercluster <- "All"
+main_markers_filt <- dplyr::filter(main_markers, p_val_adj < 0.05 & avg_log2FC > 0.7)
+topmarkers <- main_markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 10)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(data, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+
+## 1.4. Principales vías de Ontología génica enriquecidas
+
+
+```{r }
+# Establecemos organismo y cargamos la librería
+organism = "org.Mm.eg.db"
+#BiocManager::install(organism, character.only = TRUE)
+library(organism, character.only = TRUE)
+
+# Función para calcular y representar GO enriquecidos según marcadores de cada cluster (ORA)
+functionGO <- function(main_markers){
+  setwd("Resultados/")
+  golist <- list()
+  golistdf <- list()
+  for (i in 1:length(unique(main_markers$cluster))){
+    df <- dplyr::filter(main_markers, cluster == unique(main_markers$cluster)[i])
+    gene_list <- df$gene
+    enrichgo <- enrichGO(gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             pvalueCutoff = 0.05, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+    golist[i] <- enrichgo
+    golistdf[[i]] <- as.data.frame(enrichgo)
+  }
+  names(golist) <- unique(main_markers$cluster)
+  names(golistdf) <- unique(main_markers$cluster)
+  write.xlsx(golistdf, paste0("./Resultados/ORA_GO_", unique(main_markers$Supercluster), ".xlsx"))
+  enriched = merge_result(golist)
+  dotplot(enriched, label_format = 30, showCategory = 10, color = "pvalue") + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +  theme(axis.title.x = element_blank())
+}
+```
+
+
+```{r echo=FALSE, fig.height=7, fig.width=8}
+# Función GO enriquecidos
+dp1 <- functionGO(main_markers_filt)
+dp1 
+```
+
+
+# 2. Subclusters, visión general
+
+## 2.1. UMAP
+
+### Completo {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=12, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=12, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def_numeric") +
+      theme(legend.position = 'right') 
+```
+
+### Por cepa {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=16, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=16, fig.height=6}
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 2.2. Proporción celular 
+
+### Completo
+
+```{r, fig.width=8, fig.height=8}
+# Donut plot: tabla
+dfdonut <- as.data.frame(table(
+  data@meta.data$Clusters_main_def,
+  data@meta.data$Clusters_subclusters_def
+))
+colnames(dfdonut) <- c("Main", "Secondary", "N")
+# Donut plot
+PieDonut(dfdonut,
+         aes(pies= Main, 
+             donuts = Secondary, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = T,
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01)) 
+```
+
+
+### Por cepa
+
+```{r, fig.width=6, fig.height=5}
+# Barplot: tabla
+dfbarplot_general <- as.data.frame(table(
+  data@meta.data$Clusters_subclusters_def,
+  data@meta.data$Strain
+))
+colnames(dfbarplot_general) <- c("Main", "Strain", "N")
+dfbarplot_general <- dplyr::filter(dfbarplot_general, N != 0)
+# Barplot
+ggplot(dfbarplot_general, aes(fill=Main, y=N, x=Strain)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal()  +
+  labs(x = "", y = "Fraction of cells") 
+```
+
+```{r eval=FALSE, fig.height=4, fig.width=10, include=FALSE}
+# Barplot tabla
+dfbarplot_general2 <- as.data.frame(table(
+  data@meta.data$Clusters_subclusters_def,
+  data@meta.data$Strain
+))
+colnames(dfbarplot_general2) <- c("Main", "Strain", "N")
+dfbarplot_general2 <- dfbarplot_general2[dfbarplot_general2$N != 0,]
+dfbarplot_general2 <- dfbarplot_general2 %>% 
+  group_by(Strain) %>% 
+  mutate(N.Perc= N / sum(N))
+# Barplot
+ggplot(dfbarplot_general2, aes(x=Main, y=N.Perc, fill = Strain)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 0.8) +
+  labs(x = "", y = "Fraction of cells") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+```
+
+# 3. Subclusters: B cells
+
+## 3.1. UMAP
+
+### Completo {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(bcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(bcells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(bcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric") +
+      theme(legend.position = 'right') 
+```
+
+### Por cepa {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(bcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(bcells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(bcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 3.2. Proporción celular 
+
+### Completo
+
+```{r, fig.width=8, fig.height=8}
+# Donut plot: tabla
+bcelldonut <- as.data.frame(table(
+  bcells@meta.data$Clusters_subclusters_def
+))
+colnames(bcelldonut) <- c("Main",  "N")
+bcelldonut <- dplyr::filter(bcelldonut, N != 0)
+# Donut plot
+PieDonut(bcelldonut,
+         aes(pies= Main, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = T,
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
+```
+
+### Por cepa
+
+```{r, fig.width=4, fig.height=5}
+#Barplot: tabla
+bcellbarplot <- as.data.frame(table(
+  bcells@meta.data$Clusters_subclusters_def,
+  bcells@meta.data$Strain
+))
+colnames(bcellbarplot) <- c("Main", "Strain", "N")
+bcellbarplot <- dplyr::filter(bcellbarplot, N != 0)
+# barplot
+ggplot(bcellbarplot, aes(fill=Main, y=N, x=Strain)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal()  +
+  labs(x = "", y = "Fraction of cells") 
+```
+
+
+## 3.3. Principales marcadores
+
+```{r, fig.width = 15, fig.height=5}
+Idents(bcells) <- bcells@meta.data$Clusters_subclusters_def
+bcells_markers <- FindAllMarkers(object = bcells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+bcells_markers$Supercluster <- "Bcells"
+bcells_markers_filt <- dplyr::filter(bcells_markers, p_val_adj < 0.05 & avg_log2FC > 0.7)
+topmarkers <- bcells_markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 8)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(bcells, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+## 3.4. Principales vías de Ontología génica enriquecidas
+
+```{r echo=FALSE, fig.height=9, fig.width=8}
+# Función GO enriquecidos
+dp2 <- functionGO(bcells_markers_filt)
+dp2
+```
+
+## 3.5. Plasma cells
+
+```{r}
+pc <- subset(x=data, Clusters_subclusters_def %in% c("B cells (PC-IgA)", "B cells (PC-IgG)", "B cells (PC-IgM)", "B cells (PC-IgD)"))
+pc <- SCTransform(pc, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
+hvg <- VariableFeatures(pc)
+hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
+pc <- RunPCA(pc, features = hvg, verbose = FALSE)
+pc <- FindNeighbors(pc, dims = 1:18, verbose = FALSE)
+pc <- FindClusters(pc, verbose = FALSE, cluster.name = "umap_sub", resolution = 0.7)
+pc <- RunUMAP(pc, dims = 1:18, reduction.name = "umap_sub", verbose = FALSE)
+```
+
+### 3.5.1. UMAP 
+
+#### Completo {.tabset}
+
+##### Con etiqueta
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(pc, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+##### Sin etiqueta
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(pc, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Por cepa {.tabset}
+
+##### Con etiqueta
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(pc, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+##### Sin etiqueta
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(pc, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+### 3.5.2. UMAP: expresión de cadena pesada de Ig
+
+```{r, fig.width=8, fig.height=21}
+FeaturePlot(pc, features = c("Ighm", "Ighd", "Igha", "Ighg1", "Ighg2b", "Ighg2c", "Ighg3"), reduction = "umap_sub", split.by="Strain")
+```
+
+
+# 4. Subclusters: T cells, ILC y NK
+
+## 4.1. UMAP
+
+### Completo {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(tcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(tcells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(tcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric") +
+      theme(legend.position = 'right') 
+```
+
+### Por cepa {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(tcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(tcells, label = F, repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(tcells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 4.2. Proporción celular 
+
+### Completo
+
+```{r, fig.width=8, fig.height=8}
+# Donut plot: tabla
+tcelldonut <- as.data.frame(table(
+  tcells@meta.data$Clusters_subclusters_def
+))
+colnames(tcelldonut) <- c("Main",  "N")
+tcelldonut <- dplyr::filter(tcelldonut, N != 0)
+# Donut plot
+PieDonut(tcelldonut,
+         aes(pies= Main, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = T,
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
+```
+
+### Por cepa
+
+```{r, fig.width=4, fig.height=5}
+# Barplot: tabla
+tcellbarplot <- as.data.frame(table(
+  tcells@meta.data$Clusters_subclusters_def,
+  tcells@meta.data$Strain
+))
+colnames(tcellbarplot) <- c("Main", "Strain", "N")
+tcellbarplot <- dplyr::filter(tcellbarplot, N != 0)
+# barplot
+ggplot(tcellbarplot, aes(fill=Main, y=N, x=Strain)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal() +
+  labs(x = "", y = "Fraction of cells") 
+```
+
+## 4.3. Principales marcadores
+
+```{r, fig.width = 15, fig.height=4}
+Idents(tcells) <- tcells@meta.data$Clusters_subclusters_def
+tcells_markers <- FindAllMarkers(object = tcells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+tcells_markers$Supercluster <- "Tcells"
+tcells_markers_filt <- dplyr::filter(tcells_markers, p_val_adj < 0.05 & avg_log2FC > 0.7)
+
+topmarkers <- tcells_markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 5)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(tcells, topmarkers, assay="SCT")
+
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+## 4.4. Principales vías de Ontología génica enriquecidas
+
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+# Función GO enriquecidos
+dp3 <- functionGO(tcells_markers)
+dp3
+```
+
+# 5. Subclusters: Myeloid cells y Granulocytes
+
+## 5.1. UMAP
+
+### Completo {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(mycells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(mycells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=10, fig.height=6}
+DimPlot(mycells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric") +
+      theme(legend.position = 'right') 
+```
+
+### Por cepa {.tabset}
+
+#### Con etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(mycells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(mycells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+#### Números
+
+```{r, fig.width=14, fig.height=6}
+DimPlot(mycells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
+      theme(legend.position = 'right') 
+```
+
+## 5.2. Proporción celular 
+
+### Completo
+
+```{r, fig.width=8, fig.height=8}
+# Donut plot: tabla
+mycelldonut <- as.data.frame(table(
+  mycells@meta.data$Clusters_subclusters_def
+))
+colnames(mycelldonut) <- c("Main",  "N")
+mycelldonut <- dplyr::filter(mycelldonut, N != 0)
+# Donut plot
+PieDonut(mycelldonut,
+         aes(pies= Main, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = T,
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
+```
+
+### Por cepa
+
+```{r, fig.width=4, fig.height=5}
+# Barplot:tabla
+mycellbarplot <- as.data.frame(table(
+  mycells@meta.data$Clusters_subclusters_def,
+  mycells@meta.data$Strain
+))
+colnames(mycellbarplot) <- c("Main", "Strain", "N")
+mycellbarplot <- dplyr::filter(mycellbarplot, N != 0)
+#Barplot
+ggplot(mycellbarplot, aes(fill=Main, y=N, x=Strain)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal() +
+  labs(x = "", y = "Fraction of cells") 
+```
+
+## 5.3. Principales marcadores
+
+```{r, fig.width = 15, fig.height=5}
+Idents(mycells) <- mycells@meta.data$Clusters_subclusters_def
+mycells_markers <- FindAllMarkers(object = mycells,
+                              only.pos = TRUE,
+                              min.pct = 0.25, 
+                              thresh.use = 0.25)
+mycells_markers$Supercluster <- "Mycells"
+mycells_markers_filt <- dplyr::filter(mycells_markers, p_val_adj < 0.05 & avg_log2FC > 0.7)
+
+topmarkers <- mycells_markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 10)
+topmarkers <- unique(topmarkers$gene)
+dotp <- DotPlot(mycells, topmarkers, assay="SCT")
+dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab("Genes") + ylab("Clusters")
+```
+
+
+## 5.4. Principales vías de Ontología génica enriquecidas
+
+```{r echo=FALSE, fig.height=9, fig.width=9}
+# Función GO enriquecidos
+dp4 <- functionGO(mycells_markers_filt)
+dp4
+```
+
+
+```{r}
+# Guardamos todos los markers de los subclusters en un excel, 1 pestaña por supercluster
+markerlist <- list(main_markers_filt, bcells_markers_filt, tcells_markers_filt, mycells_markers_filt)
+names(markerlist) <- c("Superclusters", "bcells", "tcells", "mycells")
+write.xlsx(markerlist, "./Resultados/Markers_of_clusters.xlsx")
+```
+
+
