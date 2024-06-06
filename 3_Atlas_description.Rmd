@@ -1,5 +1,5 @@
 ---
-title: "3: descripción del atlas celular"
+title: "Informe 3: Descripción del atlas celular"
 author: "Celia Corral-Vázquez"
 date: "`r Sys.Date()`"
 output: 
@@ -54,21 +54,21 @@ mycells <- readRDS("./Datos/WT_IgAKO_mycells.rds")
 #### Con etiquetas
 
 ```{r, fig.width=10, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def") +
       theme(legend.position = 'right') 
 ```
 
 #### Sin etiquetas
 
 ```{r, fig.width=10, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def") +
       theme(legend.position = 'right') 
 ```
 
 #### Números
 
 ```{r, fig.width=10, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def_numeric") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def_numeric") +
       theme(legend.position = 'right') 
 ```
 
@@ -77,21 +77,21 @@ DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = 
 #### Con etiquetas
 
 ```{r, fig.width=14, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
 #### Sin etiquetas
 
 ```{r, fig.width=14, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
 #### Números
 
 ```{r, fig.width=14, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def_numeric", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def_numeric", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
@@ -215,13 +215,13 @@ functionGO <- function(main_markers){
   names(golistdf) <- unique(main_markers$cluster)
   write.xlsx(golistdf, paste0("./Resultados/ORA_GO_", unique(main_markers$Supercluster), ".xlsx"))
   enriched = merge_result(golist)
-  dotplot(enriched, label_format = 30, showCategory = 10, color = "pvalue") + 
+  dotplot(enriched, label_format = 50, showCategory = 5, color = "pvalue") + 
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +  theme(axis.title.x = element_blank())
 }
 ```
 
 
-```{r echo=FALSE, fig.height=7, fig.width=8}
+```{r echo=FALSE, fig.height=10, fig.width=8}
 # Función GO enriquecidos
 dp1 <- functionGO(main_markers_filt)
 dp1 
@@ -237,21 +237,21 @@ dp1
 #### Con etiquetas
 
 ```{r, fig.width=12, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def") +
       theme(legend.position = 'right') 
 ```
 
 #### Sin etiquetas
 
 ```{r, fig.width=12, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def") +
       theme(legend.position = 'right') 
 ```
 
 #### Números
 
 ```{r, fig.width=10, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def_numeric") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def_numeric") +
       theme(legend.position = 'right') 
 ```
 
@@ -260,21 +260,21 @@ DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = 
 #### Con etiquetas
 
 ```{r, fig.width=16, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
 #### Sin etiquetas
 
 ```{r, fig.width=16, fig.height=6}
-DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+DimPlot(data, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
 #### Números
 
 ```{r, fig.width=14, fig.height=6}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def_numeric", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
@@ -458,7 +458,7 @@ dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab(
 
 ## 3.4. Principales vías de Ontología génica enriquecidas
 
-```{r echo=FALSE, fig.height=9, fig.width=8}
+```{r echo=FALSE, fig.height=10, fig.width=8}
 # Función GO enriquecidos
 dp2 <- functionGO(bcells_markers_filt)
 dp2
@@ -467,7 +467,7 @@ dp2
 ## 3.5. Plasma cells
 
 ```{r}
-pc <- subset(x=data, Clusters_subclusters_def %in% c("B cells (PC-IgA)", "B cells (PC-IgG)", "B cells (PC-IgM)", "B cells (PC-IgD)"))
+pc <- subset(x=data, Clusters_subclusters_def %in% c("B cells (PC-IgA)", "B cells (PC-IgG1)", "B cells (PC-IgG2bc)", "B cells (PC-IgM)", "B cells (PC-IgD)"))
 pc <- SCTransform(pc, vars.to.regress = "percent.mt", method = "glmGamPoi", vst.flavor = "v2")
 hvg <- VariableFeatures(pc)
 hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
@@ -634,7 +634,7 @@ dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab(
 ## 4.4. Principales vías de Ontología génica enriquecidas
 
 
-```{r echo=FALSE, fig.height=8, fig.width=9}
+```{r echo=FALSE, fig.height=10, fig.width=9}
 # Función GO enriquecidos
 dp3 <- functionGO(tcells_markers)
 dp3
@@ -681,6 +681,10 @@ DimPlot(mycells, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction
 ```{r, fig.width=14, fig.height=6}
 DimPlot(mycells, label = F , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_sub", group.by = "Clusters_subclusters_def", split.by = "Strain") +
       theme(legend.position = 'right') 
+```
+
+```{r, fig.width=14, fig.height=6}
+FeaturePlot(mycells, features = c("Ptprc"), reduction = "umap_sub") 
 ```
 
 #### Números
@@ -755,7 +759,7 @@ dotp + theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.4)) + xlab(
 
 ## 5.4. Principales vías de Ontología génica enriquecidas
 
-```{r echo=FALSE, fig.height=9, fig.width=9}
+```{r echo=FALSE, fig.height=10, fig.width=9}
 # Función GO enriquecidos
 dp4 <- functionGO(mycells_markers_filt)
 dp4

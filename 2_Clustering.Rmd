@@ -270,7 +270,7 @@ DimPlot(tcells, reduction = "umap.tcells", label = TRUE, split.by="Strain")
 
 #### a.2) Marcadores
 
-```{r, fig.width=10, fig.height=6}
+```{r, fig.width=15, fig.height=6}
 markers <- FindAllMarkers(object = tcells,
                               only.pos = TRUE,
                               min.pct = 0.25, 
@@ -364,7 +364,7 @@ DimPlot(dcells, reduction = "umap.dcells", label = TRUE, split.by="Strain")
 
 #### b.2) Marcadores
 
-```{r}
+```{r, fig.width=15, fig.height=6}
 markers <- FindAllMarkers(object = dcells,
                               only.pos = TRUE,
                               min.pct = 0.25, 
@@ -399,14 +399,14 @@ labels <- c("DC (cDC)",
             "Macrophages", 
             "Monocytes", 
             "Neutrophils", 
-            "DC (cDC2B)", 
+            "DC (pDC)", 
             "B cells", 
-            "DC (cDC)", 
+            "DC (cDC1)", 
             "Epithelial",
             "DC (cDC)",
             "DC (cDC2A)",
             "DC (cDC)",
-            "Mast cells") 
+            "Ambiguous") 
 new.ids.d <- labels
 names(new.ids.d) <- levels(dcells)
 dcells <- RenameIdents(dcells, new.ids.d)
@@ -508,7 +508,7 @@ DimPlot(bcells, reduction = "umap.bcells3", label = TRUE, split.by="Strain")
 
 #### c.2) Marcadores
 
-```{r}
+```{r, fig.width=17, fig.height=6}
 markers <- FindAllMarkers(object = bcells,
                               only.pos = TRUE,
                               min.pct = 0.25, 
@@ -549,7 +549,7 @@ signatures_ucell <- list(
     GC_signature = c("Aicda", "Ptprc", "Mki67", "Bach2", "Bcl6", "Ms4a1", "Pax5")
 )
 bcells <- AddModuleScore_UCell(bcells, features=signatures_ucell, name=NULL)
-FeaturePlot(bcells, reduction = "umap_sub", features = names(signatures_ucell), ncol=3)
+FeaturePlot(bcells, reduction = "umap.bcells3", features = names(signatures_ucell), ncol=3)
 ```
 
 
@@ -570,7 +570,7 @@ labels <- c("B cells (Fo)",
             "B cells (Fo)",
             "B cells (Prolif.)",
             "B cells (ME)",
-            "B cells (PC-IgG2b/c)",
+            "B cells (PC-IgG2bc)",
             "B cells (PC-IgG1)",
             "B cells (PB-IgA)",
             "B cells (PC-IgM)",
@@ -665,24 +665,24 @@ Idents(data) <- data$Clusters_subclusters_def
 ### Superclusters
 
 ```{r, fig.width=8, fig.height=5}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def") +
       theme(legend.position = 'right') 
 ```
 
 ```{r, fig.width=12, fig.height=5}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_main_def", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_main_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
 ### Subclusters
 
 ```{r, fig.width=8, fig.height=5}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def") +
       theme(legend.position = 'right') 
 ```
 
 ```{r, fig.width=12, fig.height=5}
-DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final2", group.by = "Clusters_subclusters_def", split.by = "Strain") +
+DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = "umap_final", group.by = "Clusters_subclusters_def", split.by = "Strain") +
       theme(legend.position = 'right') 
 ```
 
@@ -702,7 +702,7 @@ levels(data) <- c(
   "B cells (PB-IgA)",
   "B cells (PC-IgA)",
   "B cells (PC-IgG1)",
-  "B cells (PC-IgG2b/c)",
+  "B cells (PC-IgG2bc)",
   "B cells (PC-IgM)",
   "B cells (PC-IgD)",
   "T cells (DN2)",
@@ -713,18 +713,19 @@ levels(data) <- c(
   "T cells (CD4+ Tregs)",
   "T cells (CD8+ TC1)",
   "T cells (CD8+ TC22)",
-  "T cells (Unknown)",
   "NK",
   "Monocytes",
   "Neutrophils",
-  "Eosinophils",
-  "Mast cells",
+#  "Eosinophils",
+#  "Mast cells",
   "DC (pDC)",
+#  "DC (cDC2B)",
   "DC (cDC)",
+  "DC (cDC1)",
+  "DC (cDC2A)",
   "Macrophages",
   "ILC (ILC2)",
-  "ILC (ILC3)",
-  "Epithelial"
+  "ILC (ILC3)"
 )
 # Dotplot
 dotp2 <- DotPlot(data, markerlist, assay="SCT")
@@ -794,7 +795,6 @@ mycells <- SCTransform(mycells, vars.to.regress = "percent.mt", method = "glmGam
 hvg <- VariableFeatures(mycells)
 hvg = grep('^Ig[jkl]', hvg, invert=T, value=T)
 mycells <- RunPCA(mycells, features = hvg, verbose = FALSE)
-#ElbowPlot(tcells)
 mycells <- FindNeighbors(mycells, dims = 1:18, verbose = FALSE)
 mycells <- FindClusters(mycells, verbose = FALSE, cluster.name = "umap_sub", resolution = 0.7)
 mycells <- RunUMAP(mycells, dims = 1:18, reduction.name = "umap_sub", verbose = FALSE)

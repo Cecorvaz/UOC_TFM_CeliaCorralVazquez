@@ -1,5 +1,5 @@
 ---
-title: '4: Strain comparison'
+title: 'Informe 4: Comparación entre cepas'
 author: "Celia Corral-Vázquez"
 date: "`r Sys.Date()`"
 output: 
@@ -28,13 +28,6 @@ library(stringr)
 ```
 
 
-# 1. Descripción de las muestras:
-
-# 2. Metodologia 
-
-## 2.1. Previa
-
-## 2.2. Actual
 
 ```{r}
 # Leemos datos
@@ -55,7 +48,7 @@ strain_colors <- c("#79ccb3", "#e9724d")
 ```
 
 
-# 3. ### Nº genes diferencialmente expresados por cluster
+# 1.  Nº genes diferencialmente expresados por cluster
 
 ```{r}
 # Creamos datos pseudobulk de los counts, basados en cepa-muestra-subcluster
@@ -108,9 +101,9 @@ funbarde(data)
 ```
 
 
-# 4. Análisis diferencial por supercluster
+# 2. Análisis diferencial por supercluster
 
-## 4.1. B cells
+## 2.1. B cells
 
 ### a) Proporciones celulares
 
@@ -159,9 +152,11 @@ barplot_fun <- function(e) {
     add_xy_position(fun = "mean", x = "Subcluster", dodge = 0.9, scales = "free") 
   stat.test$y.position <- stat.test$y.position + 0.1
   
-  bp + stat_pvalue_manual(
-    stat.test,  label = "p", tip.length = 0.01
-    )
+#  bp + stat_pvalue_manual(
+#    stat.test,  label = "p", tip.length = 0.01
+#    )
+  
+  bp
 }
 ```
 
@@ -171,7 +166,7 @@ bprop <- fun_wilcoxon(bcells)
 barplot_fun(bprop)
 ```
 
-### b) DGE: nº genes DE por cluster y top genes up/down regulados
+### b) DGE: nº genes DE por cluster 
 
 ```{r, fig.width=5, fig.height=5}
 funbarde(bcells)
@@ -196,7 +191,7 @@ functionDE <- function(subset) {
 }
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 functionDE(bcells)
 ```
 
@@ -291,7 +286,7 @@ plotplots <- function(dotplotlist, barplotlist){
 ```
 
 
-```{r}
+```{r, fig.width=7, fig.height=7}
 # Funciones GSEA
 bgsea <- functionGSEA(bcells, "bcells")
 bp <- dotplotfun(bgsea)
@@ -321,9 +316,7 @@ vp_case1 <- function(gene_signature, file_name, test_sign, y_max){
 vp_case1(gene_signature = c("Igha", "Ighd", "Ighm", "Ighg1", "Ighg2b", "Ighg2c"), test_sign = list(c("WT", "IgAKO")) , y_max = 9)
 ```
 
-
-
-## 4.2. T cells, ILC cells y NK
+## 2.2. T cells, ILC cells y NK
 
 ### a) Proporciones celulares
 
@@ -333,13 +326,13 @@ tprop <- fun_wilcoxon(tcells)
 barplot_fun(tprop)
 ```
 
-### b) DGE: nº genes DE por cluster y top genes up/down regulados
+### b) DGE: nº genes DE por cluster 
 
 ```{r, fig.width=5, fig.height=5}
 funbarde(tcells)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 functionDE(tcells)
 ```
 
@@ -355,7 +348,7 @@ plotplots(tp, tb)
 
 
 
-## 4.3. Myeloid cells y Granulocitos
+## 2.3. Myeloid cells y Granulocitos
 
 ### a) Proporciones celulares
 
@@ -371,7 +364,7 @@ barplot_fun(mprop)
 funbarde(mycells)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 functionDE(mycells)
 ```
 
@@ -386,7 +379,6 @@ plotplots(mp, mb)
 ```
 
 
-# GO terms significativos específicas (en construcción)
 
 ```{r}
 barplotfun_specific <- function(gsea, clusters, GO_ids){
