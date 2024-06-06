@@ -10,14 +10,14 @@ En total, este repositorio contiene la siguiente información:
 
 Carpeta principal:
 
-* Archivo XXXXX.rmd: código en formato R markdown del análisis inicial de controles de calidad, filtrado y las pruebas de integración de las muestras.
-* Archivo XXXXX.html: informe del análisis inicial de controles de calidad, filtrado y las pruebas de integración de las muestras.
-* Archivo XXXXX.rmd: código en formato R markdown del análisis de clustering y anotación de los clusters y subclusters.
-* Archivo XXXXX.html: informe del análisis de clustering y anotación de los clusters y subclusters.
-* Archivo XXXXX.rmd: código en formato R markdown de la descripción general de todos los superclusters y subclusters.
-* Archivo XXXXX.html: informe de la descripción general de todos los superclusters y subclusters.
-* Archivo XXXXX.rmd: código en formato R markdown del análisis de comparación entre ratones WT y IgA-KO.
-* Archivo XXXXX.html: informe del análisis de comparación entre ratones WT y IgA-KO.
+* Archivo 1_QQ.Rmd: código en formato R markdown del análisis inicial de controles de calidad, filtrado y las pruebas de integración de las muestras.
+* Archivo 1_QQ.html: informe del análisis inicial de controles de calidad, filtrado y las pruebas de integración de las muestras.
+* Archivo 2_Clustering.rmd: código en formato R markdown del análisis de clustering y anotación de los clusters y subclusters.
+* Archivo 2_Clustering.html: informe del análisis de clustering y anotación de los clusters y subclusters.
+* Archivo 3_Atlas_description.rmd: código en formato R markdown de la descripción general de todos los superclusters y subclusters.
+* Archivo 3_Atlas_description.html: informe de la descripción general de todos los superclusters y subclusters.
+* Archivo 4_StrainComp_IgAKO_vs_WT.rmd: código en formato R markdown del análisis de comparación entre ratones WT y IgA-KO.
+* Archivo 4_StrainComp_IgAKO_vs_WT.html: informe del análisis de comparación entre ratones WT y IgA-KO.
 
 Subcarpeta "Datos":
   
@@ -29,12 +29,9 @@ Subcarpeta "Datos":
 
 Subcarpeta "Resultados":
   
-* Archivo XXXX.xlsx: archivo excel con los marcadores significativos correspondientes a cada subcluster.
-* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada supercluster.
-* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células B.
-* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células T.
-* Archivo XXXX.xlsx: archivo excel con los resultados del análisis de sobrerrepresentación (ORA) de términos de Gene Ontology de cada subcluster del supercluster de células mieloides.
-* Archivo XXXX.xlsx: archivo excel con los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
-* Archivo XXXX.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
-
+* Archivo Markers_of_clusters.xlsx: archivo excel con los marcadores significativos correspondientes a cada subcluster.
+* Archivo GSEA_GO_IgAKO_WT_bcells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células B (comparación IgAKO - WT).
+* Archivo GSEA_GO_IgAKO_WT_tcells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células T (comparación IgAKO - WT).
+* Archivo GSEA_GO_IgAKO_WT_mycells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células mieloides (comparación IgAKO - WT).
+* Archivo DE_genes_WT_IgAKO.xlsx: archivo excel con los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
   
