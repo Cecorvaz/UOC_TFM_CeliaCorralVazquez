@@ -29,9 +29,10 @@ Subcarpeta "Datos":
 
 Subcarpeta "Resultados":
   
-* Archivo Markers_of_clusters.xlsx: archivo excel con los marcadores significativos correspondientes a cada subcluster.
-* Archivo GSEA_GO_IgAKO_WT_bcells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células B (comparación IgAKO - WT).
-* Archivo GSEA_GO_IgAKO_WT_tcells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células T (comparación IgAKO - WT).
-* Archivo GSEA_GO_IgAKO_WT_mycells.xlsx: archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células mieloides (comparación IgAKO - WT).
-* Archivo DE_genes_WT_IgAKO.xlsx: archivo excel con los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
+* Archivo Markers_of_clusters.xlsx: Tabla Suplementaria 1. Archivo excel con los marcadores significativos correspondientes a cada subcluster.
+* * Archivo DE_genes_WT_IgAKO.xlsx: Tabla Suplementaria 2. Archivo excel con los genes diferencialmente expresados en cada subcluster (comparación IgAKO - WT).
+* Archivo GSEA_GO_IgAKO_WT_bcells.xlsx: Tabla Suplementaria 3. Archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células B (comparación IgAKO - WT).
+* Archivo GSEA_GO_IgAKO_WT_tcells.xlsx: Tabla Suplementaria 4. Archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células T (comparación IgAKO - WT).
+* Archivo GSEA_GO_IgAKO_WT_mycells.xlsx: Tabla Suplementaria 5. Archivo excel con los resultados del Gene Set Enrichment Analysis (GSEA) de términos de Gene Ontology de los genes diferencialmente expresados en los subclusters de células mieloides (comparación IgAKO - WT).
+
   
