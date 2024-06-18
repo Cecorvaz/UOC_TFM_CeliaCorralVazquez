@@ -232,13 +232,6 @@ data <- FindClusters(data, verbose = FALSE, cluster.name = "unintegrated_cluster
 data <- RunUMAP(data, dims = 1:npca, reduction.name = "umap.unintegrated", verbose = FALSE)
 ```
 
-```{r}
-folder <- "/run/user/1000/gvfs/smb-share:server=folder.imim.es,share=bcell/LAb members DATA/Celia/2024_scRNAseq_mice_LP/Results/"
-data <- readRDS(paste0(folder, "WT_IgAKO_integrado.rds"))
-data <- FindClusters(data, verbose = FALSE, cluster.name = "unintegrated_clusters", resolution = res)
-data <- RunUMAP(data, dims = 1:npca, reduction.name = "umap.unintegrated", verbose = FALSE)
-```
-
 
 ```{r, fig.width=10, fig.height=8}
 DimPlot(data, reduction = "umap.unintegrated", group.by = c("Sample_id", "Strain", "seurat_clusters"), ncol=2)

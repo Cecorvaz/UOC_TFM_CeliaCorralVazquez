@@ -25,6 +25,7 @@ library(clusterProfiler.dplyr)
 library(openxlsx)
 library(PPInfer)
 library(stringr)
+library(readxl)
 ```
 
 
@@ -48,64 +49,9 @@ strain_colors <- c("#79ccb3", "#e9724d")
 ```
 
 
-# 1.  Nº genes diferencialmente expresados por cluster
+# 1.  Diferencias globales
 
-```{r}
-# Creamos datos pseudobulk de los counts, basados en cepa-muestra-subcluster
-pseudo_data <- AggregateExpression(data, assays = "SCT", return.seurat = T, group.by = c("Strain", "Sample_id", "Clusters_subclusters_def"))
-# En estos datos, cada "célula" es ahora un perfil de cepa-muestra-subcluster
-pseudo_data$celltype.strain <- paste(pseudo_data$Clusters_subclusters_def, pseudo_data$Strain, sep = "_")
-Idents(pseudo_data) <- "celltype.strain"
-
-# DE genes (DESeq2)
-delist <- data.frame(
-)
-for (i in 1:length(unique(data$Clusters_subclusters_def))) {
-  ref <- paste0(unique(data$Clusters_subclusters_def)[i], "_WT")
-  comp <- paste0(unique(data$Clusters_subclusters_def)[i], "_IgAKO")
-  bulk.mono.de <- FindMarkers(object = pseudo_data, 
-                         ident.1 = comp, 
-                         ident.2 = ref,
-                         test.use = "DESeq2",
-                         min.cells.feature = 2,
-                         min.cells.group = 2)
-  bulk.mono.de$DE <- "No"
-  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC > 0.585] <- "Up"
-  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC < -0.585] <- "Down"
-  bulk.mono.de$gene <- rownames(bulk.mono.de)
-  bulk.mono.de$cluster <- unique(data$Clusters_subclusters_def)[i]
-  delist <- rbind(delist, bulk.mono.de)
-}
-# Guardamos los DE en un excel
-write.xlsx(delist, "./Resultados/DE_genes_WT_IgAKO.xlsx")
-```
-
-```{r}
-# Barplot nº genes sobre e infraexpresados
-# Datos
-funbarde <- function(data){
-  delist <- dplyr::filter(delist, cluster %in% Idents(data))
-  tabde <- as.data.frame(table(delist$cluster, delist$DE))
-  colnames(tabde) <- c("Cluster", "DE", "N")
-  tabde <- dplyr::filter(tabde, DE != "No")
-  tabde$N[tabde$DE =="Down"] <- tabde$N * -1
-  tabde <- tabde %>% dplyr::filter(N != 0 & Cluster != "B cells (PC-IgA)" & Cluster != "B cells (PB-IgA)")
-  # Plot
-  ggplot(data = tabde, aes(y = N, x = Cluster, fill = N < 0)) +
-    geom_col() +
-    coord_flip() + 
-    scale_fill_manual(values = rev(strain_colors)) +
-    theme_minimal() + theme(legend.position = "none") + ylab("N genes diferencialmente expresados") + xlab("")
-}
-funbarde(data)
-```
-
-
-# 2. Análisis diferencial por supercluster
-
-## 2.1. B cells
-
-### a) Proporciones celulares
+## 1.1. Fracciones celulares
 
 ```{r}
 # Función para obtener tabla de info de fracciones celulares
@@ -145,30 +91,98 @@ barplot_fun <- function(e) {
   
   stat.test <- e %>%
     group_by(Subcluster) %>%
-    wilcox_test(N.Perc ~ Strain) %>%
+    t_test(N.Perc ~ Strain) %>%
     add_significance("p")
   
   stat.test <- stat.test %>%
     add_xy_position(fun = "mean", x = "Subcluster", dodge = 0.9, scales = "free") 
   stat.test$y.position <- stat.test$y.position + 0.1
   
-#  bp + stat_pvalue_manual(
-#    stat.test,  label = "p", tip.length = 0.01
-#    )
+  bp + stat_pvalue_manual(
+    stat.test,  label = "p", tip.length = 0.01
+    )
   
-  bp
 }
 ```
 
+```{r, fig.height=4.5, fig.width=15}
+# Funciones fracciones celulares
+totalprop <- fun_wilcoxon(data)
+barplot_fun(totalprop)
+```
+
+
+## 1.2. Nº genes diferencialmente expresados por cluster
+
 ```{r}
+# Creamos datos pseudobulk de los counts, basados en cepa-muestra-subcluster
+pseudo_data <- AggregateExpression(data, assays = "SCT", return.seurat = T, group.by = c("Strain", "Sample_id", "Clusters_subclusters_def"))
+# En estos datos, cada "célula" es ahora un perfil de cepa-muestra-subcluster
+pseudo_data$celltype.strain <- paste(pseudo_data$Clusters_subclusters_def, pseudo_data$Strain, sep = "_")
+Idents(pseudo_data) <- "celltype.strain"
+
+# DE genes (DESeq2)
+delist <- data.frame(
+)
+for (i in 1:length(unique(data$Clusters_subclusters_def))) {
+  ref <- paste0(unique(data$Clusters_subclusters_def)[i], "_WT")
+  comp <- paste0(unique(data$Clusters_subclusters_def)[i], "_IgAKO")
+  bulk.mono.de <- FindMarkers(object = pseudo_data, 
+                         ident.1 = comp, 
+                         ident.2 = ref,
+                         test.use = "DESeq2",
+                         min.cells.feature = 2,
+                         min.cells.group = 2)
+  bulk.mono.de$DE <- "No"
+  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC > 0.585] <- "Up"
+  bulk.mono.de$DE[bulk.mono.de$p_val_adj < 0.05 & bulk.mono.de$avg_log2FC < -0.585] <- "Down"
+  bulk.mono.de$gene <- rownames(bulk.mono.de)
+  bulk.mono.de$cluster <- unique(data$Clusters_subclusters_def)[i]
+  delist <- rbind(delist, bulk.mono.de)
+  delist <- dplyr::filter(delist, gene %in% grep('^Ig[jklh]', delist$gene, invert=T, value=T))
+}
+# Guardamos los DE en un excel
+write.xlsx(delist, "./Resultados/DE_genes_WT_IgAKO.xlsx")
+```
+
+```{r}
+# Barplot nº genes sobre e infraexpresados
+# Datos
+funbarde <- function(data){
+  delist <- dplyr::filter(delist, cluster %in% Idents(data))
+  tabde <- as.data.frame(table(delist$cluster, delist$DE))
+  colnames(tabde) <- c("Cluster", "DE", "N")
+  tabde <- dplyr::filter(tabde, DE != "No")
+  tabde$N[tabde$DE =="Down"] <- tabde$N * -1
+  tabde <- tabde %>% dplyr::filter(N != 0 & Cluster != "B cells (PC-IgA)" & Cluster != "B cells (PB-IgA)")
+  # Plot
+  ggplot(data = tabde, aes(y = N, x = Cluster, fill = N < 0)) +
+    geom_col() +
+    coord_flip() + 
+    scale_fill_manual(values = rev(strain_colors)) +
+    theme_minimal() + theme(legend.position = "none") + ylab("N genes diferencialmente expresados") + xlab("")
+}
+funbarde(data)
+```
+
+
+# 2. Análisis diferencial por supercluster
+
+## 2.1. B cells
+
+### a) Proporciones celulares
+
+
+
+```{r, fig.height=4, fig.width=7}
 # Funciones fracciones celulares
 bprop <- fun_wilcoxon(bcells)
 barplot_fun(bprop)
 ```
 
-### b) DGE: nº genes DE por cluster 
+### b) DGE: nº genes DE por cluster y top genes DE
 
-```{r, fig.width=5, fig.height=5}
+```{r, fig.width=5, fig.height=3}
 funbarde(bcells)
 ```
 
@@ -191,7 +205,7 @@ functionDE <- function(subset) {
 }
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r, fig.width=4, fig.height=3}
 functionDE(bcells)
 ```
 
@@ -306,7 +320,7 @@ vp_case1 <- function(gene_signature, file_name, test_sign, y_max){
            group.by = "Strain", 
            cols = strain_colors,
             y.max = y_max # add the y-axis maximum value - otherwise p-value hidden
-    ) + stat_compare_means(comparisons = test_sign, label = "p.signif", method = "wilcox.test") +
+    ) + stat_compare_means(comparisons = test_sign, label = "p", method = "wilcox.test") +
       xlab("") + theme(legend.position = "none")
   }
   purrr::map(gene_signature, plot_case1) %>% cowplot::plot_grid(plotlist = .)
@@ -320,19 +334,19 @@ vp_case1(gene_signature = c("Igha", "Ighd", "Ighm", "Ighg1", "Ighg2b", "Ighg2c")
 
 ### a) Proporciones celulares
 
-```{r}
+```{r, fig.height=4.5, fig.width=7}
 # Funciones proporciones celulares
 tprop <- fun_wilcoxon(tcells)
-barplot_fun(tprop)
+barplot_fun(tprop) 
 ```
 
-### b) DGE: nº genes DE por cluster 
+### b) DGE: nº genes DE por cluster y top genes DE
 
-```{r, fig.width=5, fig.height=5}
+```{r, fig.width=5, fig.height=3}
 funbarde(tcells)
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r, fig.width=4, fig.height=3}
 functionDE(tcells)
 ```
 
@@ -352,19 +366,19 @@ plotplots(tp, tb)
 
 ### a) Proporciones celulares
 
-```{r}
+```{r, fig.height=3.5, fig.width=7}
 # Funciones proporciones celulares
 mprop <- fun_wilcoxon(mycells)
-barplot_fun(mprop)
+barplot_fun(mprop) + ylim(0,0.20)
 ```
 
-### b) DGE: nº genes DE por cluster y top genes up/down regulados
+### b) DGE: nº genes DE por cluster y top genes DE
 
-```{r, fig.width=5, fig.height=5}
+```{r, fig.width=5, fig.height=3}
 funbarde(mycells)
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r, fig.width=4, fig.height=3}
 functionDE(mycells)
 ```
 
@@ -378,33 +392,23 @@ mb <- barplotfun(mgsea)
 plotplots(mp, mb)
 ```
 
+# 3. Rutas específicas seleccionadas
 
-
-```{r}
-barplotfun_specific <- function(gsea, clusters, GO_ids){
-  gsea <- gsea[names(gsea) %in% clusters]
-  listbarplot <- list()
-  
-  for (i in 1:length(gsea)){
-      Genes <- as.data.frame(gsea[[i]]) %>% dplyr::filter(ID %in% GO_ids)
-      Genes$Description <- str_wrap(Genes$Description, width = 50)
-      p <- ggplot(data = Genes, aes(y = NES, x = reorder(Description, NES), fill = pvalue)) +
+```{r, fig.width=6, fig.height=7}
+# Ruta a un archivo con los resultados de GSEA seleccionados, una pestaña por cluster
+path = "GO pathways para graficar.xlsx"
+lista = lapply(excel_sheets(path), read_excel, path = path)
+names(lista) = excel_sheets(path)
+for (cellgroup in names(lista)){
+  gsea = lista[[cellgroup]]
+  gsea$Description <- str_wrap(gsea$Description, width = 50)
+  p = ggplot(data = gsea, aes(y = NES, x = reorder(Description, NES), fill = pvalue)) +
         geom_col() +
-        coord_flip() + 
+        coord_flip() +
 #        scale_fill_gradient(values = rev(strain_colors)) +
         scale_fill_gradientn(colours = rev(strain_colors), guide = guide_colorbar(reverse=TRUE)) +
         theme_minimal() + ylab("NES") + xlab("")
-      listbarplot[[i]] <- p
-  }
-  names(listbarplot) <- names(gsea)
-  for (i in 1:length(listbarplot)){
-      print(names(listbarplot)[i])
-      print(listbarplot[[i]])
-  }
+  print(p + ggtitle(cellgroup))
 }
-```
-
-```{r eval=FALSE, include=FALSE}
-barplotfun_specific(mgsea, "Macrophages", c("GO:0051897", "GO:0009142", "GO:1905322"))
 ```
 

@@ -97,15 +97,16 @@ DimPlot(data, label = T , repel = T, label.size = 3, pt.size = 0.5, reduction = 
 
 ## 1.2. Proporción celular 
 
-### Completo
+### Completo  {.tabset}
+
+#### Con etiquetas + tabla
 
 ```{r, fig.width=8, fig.height=8}
 # Donutplot: creamos tabla
 dfdonut <- as.data.frame(table(
-  data@meta.data$Clusters_main_def,
-  data@meta.data$Clusters_subclusters_def
+  data@meta.data$Clusters_main_def
 ))
-colnames(dfdonut) <- c("Main", "Secondary", "N")
+colnames(dfdonut) <- c("Main", "N")
 
 # Donut plot
 PieDonut(dfdonut,
@@ -124,6 +125,33 @@ PieDonut(dfdonut,
          pieLabelSize = 3.5,
          showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
 
+dfdonut %>% dplyr::filter(N > 0) %>% kable()
+```
+
+#### Sin etiquetas
+
+```{r, fig.width=8, fig.height=8}
+# Donut plot
+PieDonut(dfdonut,
+         aes(pies= Main, 
+             #donuts = Secondary, 
+             count = N),
+         ratioByGroup=T,
+         addPieLabel  = F,
+         addDonutLabel = F,
+         showRatioDonut = F,
+          showRatioPie = F,
+         showDonutName = F,
+         labelposition = getOption("PieDonut.labelposition", 1),
+         labelpositionThreshold = 0.4,
+         donutLabelSize = 3,
+         use.labels = F,
+         title="",
+         maxx = 1.5,
+         r0=0,
+         showPieName=F, 
+         pieLabelSize = 3.5,
+         showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01))
 ```
 
 
@@ -176,6 +204,7 @@ main_markers <- FindAllMarkers(object = data,
                               thresh.use = 0.25)
 main_markers$Supercluster <- "All"
 main_markers_filt <- dplyr::filter(main_markers, p_val_adj < 0.05 & avg_log2FC > 0.7)
+main_markers_filt <- dplyr::filter(main_markers_filt, gene %in% grep('^Ig[jkl]', main_markers_filt$gene, invert=T, value=T))
 topmarkers <- main_markers_filt %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 10)
 topmarkers <- unique(topmarkers$gene)
 dotp <- DotPlot(data, topmarkers, assay="SCT")
@@ -199,7 +228,8 @@ functionGO <- function(main_markers){
   golistdf <- list()
   for (i in 1:length(unique(main_markers$cluster))){
     df <- dplyr::filter(main_markers, cluster == unique(main_markers$cluster)[i])
-    gene_list <- df$gene
+    gene_list_original <- df$gene
+    gene_list <- grep('^Ig[jklh]', gene_list_original, invert=T, value=T)
     enrichgo <- enrichGO(gene_list, 
              ont ="BP", 
              keyType = "SYMBOL", 
@@ -294,8 +324,10 @@ PieDonut(dfdonut,
          aes(pies= Main, 
              donuts = Secondary, 
              count = N),
-         ratioByGroup=T,
-         addPieLabel  = T,
+         ratioByGroup=F,
+         showRatioDonut = F,
+         showRatioPie = F,
+         addPieLabel  = F,
          labelpositionThreshold = 0.4,
          donutLabelSize = 3,
          use.labels = F,
@@ -305,8 +337,46 @@ PieDonut(dfdonut,
          showPieName=F, 
          pieLabelSize = 3.5,
          showRatioThreshold = getOption("PieDonut.showRatioThreshold", 0.01)) 
+
+dfdonut %>% dplyr::filter(N > 0) %>% kable()
 ```
 
+```{r, fig.width=9, fig.height=5}
+# Barplot: tabla
+dfbarplot_general <- as.data.frame(table(
+  data@meta.data$Clusters_subclusters_def,
+  data@meta.data$Clusters_main_def
+))
+colnames(dfbarplot_general) <- c("Subcluster", "Main", "N")
+dfbarplot_general$Supercluster <- dfbarplot_general$Main
+dfbarplot_general$Supercluster[dfbarplot_general$Supercluster %in% c("T cells", "ILC", "NK")] <- "T cells"
+dfbarplot_general$Supercluster[dfbarplot_general$Supercluster %in% c("Myeloid cells", "Granulocytes")] <- "Myeloid cells"
+dfbarplot_general$Supercluster <- droplevels(dfbarplot_general$Supercluster)
+dfbarplot_general <- dplyr::filter(dfbarplot_general, N != 0)
+dfbarplot_general <- dfbarplot_general %>% group_by(Supercluster) %>% mutate(Perc= round(N * 100 / sum(N),2))
+
+# Barplot
+bctab <- dplyr::filter(dfbarplot_general, Supercluster == "B cells")
+p1 <- ggplot(bctab, aes(fill=Subcluster, y=N, x=Supercluster)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal()  +
+  labs(x = "", y = "Fraction of cells")
+
+tctab <- dplyr::filter(dfbarplot_general, Supercluster == "T cells")
+p2 <- ggplot(tctab, aes(fill=Subcluster, y=N, x=Supercluster)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal()  +
+  labs(x = "", y = "Fraction of cells") 
+
+mctab <- dplyr::filter(dfbarplot_general, Supercluster == "Myeloid cells")
+p3 <- ggplot(mctab, aes(fill=Subcluster, y=N, x=Supercluster)) + 
+    geom_bar(position="fill", stat="identity") +
+  theme_minimal()  +
+  labs(x = "", y = "Fraction of cells") 
+
+
+p1 + p2 + p3
+```
 
 ### Por cepa
 
