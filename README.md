@@ -21,10 +21,10 @@ Carpeta principal:
 
 Subcarpeta "Datos":
   
-* Archivo XXXX.rds: objeto Seurat con el atlas completo, integrado y anotado de las diferentes poblaciones y subpoblaciones celulares. Contiene también los metadatos correspondientes a la identificación de muesrta (Sample_id), la cepa de ratones (Strain), los superclusters (Clusters_main_def) y los subclusters (Clusters_subclusters_def).
-* Archivo XXXX.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células B. Contiene los mismos metadatos que el atlas completo.
-* Archivo XXXX.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células T, ILC y NK. Contiene los mismos metadatos que el atlas completo.
-* Archivo XXXX.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células mieloides. Contiene los mismos metadatos que el atlas completo.
+* Archivo WT_IgAKO_anotado.rds: objeto Seurat con el atlas completo, integrado y anotado de las diferentes poblaciones y subpoblaciones celulares. Contiene también los metadatos correspondientes a la identificación de muesrta (Sample_id), la cepa de ratones (Strain), los superclusters (Clusters_main_def) y los subclusters (Clusters_subclusters_def).
+* Archivo WT_IgAKO_bcells.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células B. Contiene los mismos metadatos que el atlas completo.
+* Archivo WT_IgAKO_tcells.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células T, ILC y NK. Contiene los mismos metadatos que el atlas completo.
+* Archivo WT_IgAKO_mycells.rds: objeto Seurat con el atlas integrado y anotado del supercluster de células mieloides. Contiene los mismos metadatos que el atlas completo.
 * Archivo cellmarkers.xlsx: archivo excel con los marcadores de poblaciones celulares usados para comprobar la anotación de los clusters.
 
 Subcarpeta "Resultados":
